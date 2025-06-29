@@ -31,8 +31,7 @@ fn validate_opcode_uniqueness(registry: &OpcodeRegistry) -> Vec<String> {
         for &opcode_byte in opcodes.keys() {
             if !seen.insert(opcode_byte) {
                 errors.push(format!(
-                    "Duplicate opcode 0x{:02x} found in fork {:?}",
-                    opcode_byte, fork
+                    "Duplicate opcode 0x{opcode_byte:02x} found in fork {fork:?}"
                 ));
             }
         }
@@ -116,8 +115,7 @@ fn validate_historical_accuracy(registry: &OpcodeRegistry) -> Vec<String> {
             }
         } else {
             errors.push(format!(
-                "Missing expected opcode 0x{:02x} ({}) introduced in {:?}",
-                opcode_byte, name, expected_fork
+                "Missing expected opcode 0x{opcode_byte:02x} ({name}) introduced in {expected_fork:?}"
             ));
         }
     }
@@ -421,9 +419,9 @@ impl ValidationReport {
         if !self.errors.is_empty() {
             println!("\n❌ ERRORS:");
             for (category, errors) in &self.errors {
-                println!("  {}:", category);
+                println!("  {category}:");
                 for error in errors {
-                    println!("    - {}", error);
+                    println!("    - {error}");
                 }
             }
         }
@@ -431,9 +429,9 @@ impl ValidationReport {
         if !self.warnings.is_empty() {
             println!("\n⚠️  WARNINGS:");
             for (category, warnings) in &self.warnings {
-                println!("  {}:", category);
+                println!("  {category}:");
                 for warning in warnings {
-                    println!("    - {}", warning);
+                    println!("    - {warning}");
                 }
             }
         }
@@ -441,9 +439,9 @@ impl ValidationReport {
         if !self.info.is_empty() {
             println!("\nℹ️  INFO:");
             for (category, info_items) in &self.info {
-                println!("  {}:", category);
+                println!("  {category}:");
                 for info in info_items {
-                    println!("    - {}", info);
+                    println!("  {info}:");
                 }
             }
         }

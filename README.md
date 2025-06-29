@@ -1,24 +1,13 @@
 # EOT - EVM Opcode Table
 
-A comprehensive Rust implementation of EVM opcodes for all Ethereum forks, with complete fork inheritance, validation, and metadata.
+A Rust implementation of EVM opcodes for all Ethereum forks, with complete fork inheritance, validation, and metadata.
 
 [![Crates.io](https://img.shields.io/crates/v/eot.svg)](https://crates.io/crates/eot)
 [![Documentation](https://docs.rs/eot/badge.svg)](https://docs.rs/eot)
 [![Build Status](https://github.com/g4titanx/eot/workflows/CI/badge.svg)](https://github.com/g4titanx/eot/actions)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
-## Features
-
-- ✅ **Complete Fork Coverage**: Frontier → Cancun (and beyond)
-- ✅ **Smart Inheritance**: Forks automatically inherit opcodes from previous forks
-- ✅ **Rich Metadata**: Gas costs, stack effects, EIP references, descriptions
-- ✅ **Historical Gas Tracking**: Track gas cost changes across forks
-- ✅ **Built-in Validation**: Verify consistency and historical accuracy
-- ✅ **Type Safety**: Each fork is a separate type with compile-time guarantees
-- ✅ **Zero Dependencies**: Lightweight with no external dependencies
-- ✅ **Data-Driven**: Generated from verified CSV data for accuracy
-
-## Quick Start
+## Quick start
 
 Add this to your `Cargo.toml`:
 
@@ -85,7 +74,7 @@ assert_eq!(metadata.group, Group::StackMemoryStorageFlow);
 assert_eq!(metadata.eip, Some(1153));
 ```
 
-### Advanced Features
+### Other Features
 
 ```rust
 use eot::{Cancun, traits::OpcodeExt};
@@ -123,70 +112,6 @@ println!("Group: {:?}", add.group()); // Group::StopArithmetic
 | Shanghai | 17,034,870 | Apr 2023 | `PUSH0` | ✅ |
 | Cancun | 19,426,587 | Mar 2024 | `TLOAD`, `TSTORE`, `MCOPY`, `BLOBHASH`, `BLOBBASEFEE` | ✅ |
 
-## Examples
-
-### Fork Inheritance
-
-```rust
-use eot::{Frontier, Cancun, OpCode};
-
-// Cancun includes all Frontier opcodes
-assert!(Cancun::has_opcode(0x01)); // ADD from Frontier
-assert!(Cancun::has_opcode(0x5c)); // TLOAD from Cancun
-
-// But Frontier doesn't have newer opcodes
-assert!(Frontier::has_opcode(0x01));  // ADD ✅
-assert!(!Frontier::has_opcode(0x5c)); // TLOAD ❌
-```
-
-### Gas Cost Analysis
-
-```rust
-use eot::{Cancun, OpCode};
-
-let opcodes = vec![0x60, 0x60, 0x01]; // PUSH1, PUSH1, ADD
-let total_gas: u16 = opcodes.iter()
-    .map(|&byte| Cancun::from(byte).gas_cost())
-    .sum();
-
-println!("Total gas cost: {}", total_gas); // 9 (3 + 3 + 3)
-```
-
-### Contract Fork Compatibility
-
-```rust
-use eot::{Shanghai, Cancun, OpCode};
-
-let contract_opcodes = vec![0x5f, 0x5c]; // PUSH0, TLOAD
-
-// Check compatibility with different forks
-let shanghai_compatible = contract_opcodes.iter()
-    .all(|&opcode| Shanghai::has_opcode(opcode));
-println!("Shanghai compatible: {}", shanghai_compatible); // false (no TLOAD)
-
-let cancun_compatible = contract_opcodes.iter()
-    .all(|&opcode| Cancun::has_opcode(opcode));
-println!("Cancun compatible: {}", cancun_compatible); // true
-```
-
-### Opcode Registry
-
-```rust
-use eot::{OpcodeRegistry, Fork};
-
-let registry = OpcodeRegistry::new();
-
-// Get all opcodes for a specific fork
-let cancun_opcodes = registry.get_opcodes(Fork::Cancun);
-println!("Cancun has {} opcodes", cancun_opcodes.len());
-
-// Check opcode availability across forks
-println!("TLOAD in Frontier: {}", 
-    registry.is_opcode_available(Fork::Frontier, 0x5c)); // false
-println!("TLOAD in Cancun: {}", 
-    registry.is_opcode_available(Fork::Cancun, 0x5c));   // true
-```
-
 ## Building the Project
 
 ### Prerequisites
@@ -212,32 +137,6 @@ python3 generate_forks.py
 # Then rebuild
 cargo build
 ```
-
-## Validation
-
-Built-in validation ensures historical accuracy:
-
-```rust
-use eot::{OpcodeRegistry, validation};
-
-let registry = OpcodeRegistry::new();
-let report = validation::run_comprehensive_validation(&registry);
-
-if report.has_errors() {
-    eprintln!("❌ Validation failed:");
-    report.print_summary();
-} else {
-    println!("✅ All validations passed!");
-}
-```
-
-The validation system checks:
-- ✅ Opcode uniqueness within forks
-- ✅ Proper fork inheritance
-- ✅ Historical accuracy of opcode introductions
-- ✅ Gas cost consistency
-- ✅ Stack input/output validation
-- ✅ EIP reference accuracy
 
 ## Contributing
 
