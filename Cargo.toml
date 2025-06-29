@@ -1,0 +1,20 @@
+[package]
+name = "eot"
+version = "0.1.0"
+edition = "2021"
+authors = ["alake"]
+license = "MIT"
+description = "EVM Opcode Table - Rust implementation of EVM opcodes for all Ethereum forks"
+documentation = "https://docs.rs/eot"
+homepage = "https://github.com/g4titanx/eot"
+repository = "https://github.com/g4titanx/eot"
+keywords = ["ethereum", "evm", "opcodes", "blockchain", "smart-contracts"]
+categories = ["cryptography::cryptocurrencies", "development-tools"]
+readme = "README.md"
+
+[features]
+default = ["std"]
+std = []
+
+[dependencies]
+
