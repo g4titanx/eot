@@ -19,6 +19,12 @@ pub use traits::*;
 pub mod validation;
 pub use validation::*;
 
+// Unified opcodes feature for bytecode manipulation tools
+#[cfg(feature = "unified-opcodes")]
+pub mod unified;
+#[cfg(feature = "unified-opcodes")]
+pub use unified::UnifiedOpcode;
+
 /// Ethereum hard fork identifiers in chronological order
 #[derive(Clone, Copy, Debug, PartialOrd, Ord, PartialEq, Eq, Hash)]
 pub enum Fork {
