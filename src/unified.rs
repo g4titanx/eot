@@ -117,7 +117,7 @@ pub enum UnifiedOpcode {
     TIMESTAMP,
     /// Get the block's number (0x43)
     NUMBER,
-    /// Get the block's difficulty (0x44)
+    /// Get the block's difficulty (pre-Merge) / previous beacon chain randomness (post-Merge) (0x44)
     DIFFICULTY,
     /// Get the block's gas limit (0x45)
     GASLIMIT,
@@ -570,6 +570,7 @@ impl UnifiedOpcode {
             "TIMESTAMP" => Ok(Self::TIMESTAMP),
             "NUMBER" => Ok(Self::NUMBER),
             "DIFFICULTY" => Ok(Self::DIFFICULTY),
+            "PREVRANDAO" => Ok(Self::DIFFICULTY), // EIP-4399: Same opcode, different semantic meaning
             "GASLIMIT" => Ok(Self::GASLIMIT),
             "CHAINID" => Ok(Self::CHAINID),
             "SELFBALANCE" => Ok(Self::SELFBALANCE),
