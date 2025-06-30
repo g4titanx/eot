@@ -30,4 +30,4 @@ jobs:
       - name: tests
         uses: taiki-e/install-action@nextest
       - name: nextest run
-        run: cargo nextest run --release --all --no-fail-fast
+        run: cargo nextest run --release --all --no-fail-fast --features unified-opcodes
