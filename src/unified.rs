@@ -72,7 +72,7 @@ pub enum UnifiedOpcode {
 
     // 0x20: SHA3
     /// Compute Keccak-256 hash (0x20)
-    SHA3,
+    KECCAK256,
 
     // 0x30-0x3f: Environmental Information
     /// Get address of currently executing account (0x30)
@@ -127,6 +127,10 @@ pub enum UnifiedOpcode {
     SELFBALANCE,
     /// Get the base fee (0x48)
     BASEFEE,
+    /// Get the versioned hash of the i-th blob (0x49, Cancun)
+    BLOBHASH,
+    /// Get the blob base fee (0x4a, Cancun)
+    BLOBBASEFEE,
 
     // 0x50-0x5f: Stack, Memory, Storage and Flow Operations
     /// Remove item from stack (0x50)
@@ -276,7 +280,7 @@ impl UnifiedOpcode {
             0x1c => Self::SHR,
             0x1d => Self::SAR,
 
-            0x20 => Self::SHA3,
+            0x20 => Self::KECCAK256,
 
             0x30 => Self::ADDRESS,
             0x31 => Self::BALANCE,
@@ -304,6 +308,8 @@ impl UnifiedOpcode {
             0x46 => Self::CHAINID,
             0x47 => Self::SELFBALANCE,
             0x48 => Self::BASEFEE,
+            0x49 => Self::BLOBHASH,
+            0x4a => Self::BLOBBASEFEE,
 
             0x50 => Self::POP,
             0x51 => Self::MLOAD,
@@ -378,7 +384,7 @@ impl UnifiedOpcode {
             Self::SHR => 0x1c,
             Self::SAR => 0x1d,
 
-            Self::SHA3 => 0x20,
+            Self::KECCAK256 => 0x20,
 
             Self::ADDRESS => 0x30,
             Self::BALANCE => 0x31,
@@ -406,6 +412,8 @@ impl UnifiedOpcode {
             Self::CHAINID => 0x46,
             Self::SELFBALANCE => 0x47,
             Self::BASEFEE => 0x48,
+            Self::BLOBHASH => 0x49,
+            Self::BLOBBASEFEE => 0x4a,
 
             Self::POP => 0x50,
             Self::MLOAD => 0x51,
@@ -537,7 +545,8 @@ impl UnifiedOpcode {
             "SHR" => Ok(Self::SHR),
             "SAR" => Ok(Self::SAR),
 
-            "SHA3" => Ok(Self::SHA3),
+            "SHA3" => Ok(Self::KECCAK256), // Accept both names
+            "KECCAK256" => Ok(Self::KECCAK256),
 
             "ADDRESS" => Ok(Self::ADDRESS),
             "BALANCE" => Ok(Self::BALANCE),
@@ -565,6 +574,8 @@ impl UnifiedOpcode {
             "CHAINID" => Ok(Self::CHAINID),
             "SELFBALANCE" => Ok(Self::SELFBALANCE),
             "BASEFEE" => Ok(Self::BASEFEE),
+            "BLOBHASH" => Ok(Self::BLOBHASH),
+            "BLOBBASEFEE" => Ok(Self::BLOBBASEFEE),
 
             "POP" => Ok(Self::POP),
             "MLOAD" => Ok(Self::MLOAD),
