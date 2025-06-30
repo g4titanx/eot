@@ -222,7 +222,7 @@ impl UnifiedOpcode {
     /// # Examples
     /// ```
     /// use eot::UnifiedOpcode;
-    /// 
+    ///
     /// let (opcode, imm_size) = UnifiedOpcode::parse(0x60);
     /// assert_eq!(opcode, UnifiedOpcode::PUSH(1));
     /// assert_eq!(imm_size, 1);
@@ -234,7 +234,7 @@ impl UnifiedOpcode {
     /// Parse a byte into a unified opcode for a specific fork
     pub fn parse_with_fork(byte: u8, fork: Fork) -> (Self, usize) {
         let registry = OpcodeRegistry::new();
-        
+
         if registry.is_opcode_available(fork, byte) {
             let unified = Self::from_byte(byte);
             let imm_size = Self::immediate_size(&unified);
@@ -260,7 +260,7 @@ impl UnifiedOpcode {
             0x09 => Self::MULMOD,
             0x0a => Self::EXP,
             0x0b => Self::SIGNEXTEND,
-            
+
             0x10 => Self::LT,
             0x11 => Self::GT,
             0x12 => Self::SLT,
@@ -275,9 +275,9 @@ impl UnifiedOpcode {
             0x1b => Self::SHL,
             0x1c => Self::SHR,
             0x1d => Self::SAR,
-            
+
             0x20 => Self::SHA3,
-            
+
             0x30 => Self::ADDRESS,
             0x31 => Self::BALANCE,
             0x32 => Self::ORIGIN,
@@ -294,7 +294,7 @@ impl UnifiedOpcode {
             0x3d => Self::RETURNDATASIZE,
             0x3e => Self::RETURNDATACOPY,
             0x3f => Self::EXTCODEHASH,
-            
+
             0x40 => Self::BLOCKHASH,
             0x41 => Self::COINBASE,
             0x42 => Self::TIMESTAMP,
@@ -304,7 +304,7 @@ impl UnifiedOpcode {
             0x46 => Self::CHAINID,
             0x47 => Self::SELFBALANCE,
             0x48 => Self::BASEFEE,
-            
+
             0x50 => Self::POP,
             0x51 => Self::MLOAD,
             0x52 => Self::MSTORE,
@@ -321,17 +321,17 @@ impl UnifiedOpcode {
             0x5d => Self::TSTORE,
             0x5e => Self::MCOPY,
             0x5f => Self::PUSH0,
-            
+
             0x60..=0x7f => Self::PUSH(byte - 0x5f), // PUSH1 to PUSH32
             0x80..=0x8f => Self::DUP(byte - 0x7f),  // DUP1 to DUP16
             0x90..=0x9f => Self::SWAP(byte - 0x8f), // SWAP1 to SWAP16
-            
+
             0xa0 => Self::LOG0,
             0xa1 => Self::LOG1,
             0xa2 => Self::LOG2,
             0xa3 => Self::LOG3,
             0xa4 => Self::LOG4,
-            
+
             0xf0 => Self::CREATE,
             0xf1 => Self::CALL,
             0xf2 => Self::CALLCODE,
@@ -342,7 +342,7 @@ impl UnifiedOpcode {
             0xfd => Self::REVERT,
             0xfe => Self::INVALID,
             0xff => Self::SELFDESTRUCT,
-            
+
             _ => Self::UNKNOWN(byte),
         }
     }
@@ -362,7 +362,7 @@ impl UnifiedOpcode {
             Self::MULMOD => 0x09,
             Self::EXP => 0x0a,
             Self::SIGNEXTEND => 0x0b,
-            
+
             Self::LT => 0x10,
             Self::GT => 0x11,
             Self::SLT => 0x12,
@@ -377,9 +377,9 @@ impl UnifiedOpcode {
             Self::SHL => 0x1b,
             Self::SHR => 0x1c,
             Self::SAR => 0x1d,
-            
+
             Self::SHA3 => 0x20,
-            
+
             Self::ADDRESS => 0x30,
             Self::BALANCE => 0x31,
             Self::ORIGIN => 0x32,
@@ -396,7 +396,7 @@ impl UnifiedOpcode {
             Self::RETURNDATASIZE => 0x3d,
             Self::RETURNDATACOPY => 0x3e,
             Self::EXTCODEHASH => 0x3f,
-            
+
             Self::BLOCKHASH => 0x40,
             Self::COINBASE => 0x41,
             Self::TIMESTAMP => 0x42,
@@ -406,7 +406,7 @@ impl UnifiedOpcode {
             Self::CHAINID => 0x46,
             Self::SELFBALANCE => 0x47,
             Self::BASEFEE => 0x48,
-            
+
             Self::POP => 0x50,
             Self::MLOAD => 0x51,
             Self::MSTORE => 0x52,
@@ -423,17 +423,17 @@ impl UnifiedOpcode {
             Self::TSTORE => 0x5d,
             Self::MCOPY => 0x5e,
             Self::PUSH0 => 0x5f,
-            
+
             Self::PUSH(n) => 0x5f + n,
             Self::DUP(n) => 0x7f + n,
             Self::SWAP(n) => 0x8f + n,
-            
+
             Self::LOG0 => 0xa0,
             Self::LOG1 => 0xa1,
             Self::LOG2 => 0xa2,
             Self::LOG3 => 0xa3,
             Self::LOG4 => 0xa4,
-            
+
             Self::CREATE => 0xf0,
             Self::CALL => 0xf1,
             Self::CALLCODE => 0xf2,
@@ -444,7 +444,7 @@ impl UnifiedOpcode {
             Self::REVERT => 0xfd,
             Self::INVALID => 0xfe,
             Self::SELFDESTRUCT => 0xff,
-            
+
             Self::UNKNOWN(byte) => *byte,
         }
     }
@@ -521,7 +521,7 @@ impl UnifiedOpcode {
             "MULMOD" => Ok(Self::MULMOD),
             "EXP" => Ok(Self::EXP),
             "SIGNEXTEND" => Ok(Self::SIGNEXTEND),
-            
+
             "LT" => Ok(Self::LT),
             "GT" => Ok(Self::GT),
             "SLT" => Ok(Self::SLT),
@@ -536,9 +536,9 @@ impl UnifiedOpcode {
             "SHL" => Ok(Self::SHL),
             "SHR" => Ok(Self::SHR),
             "SAR" => Ok(Self::SAR),
-            
+
             "SHA3" => Ok(Self::SHA3),
-            
+
             "ADDRESS" => Ok(Self::ADDRESS),
             "BALANCE" => Ok(Self::BALANCE),
             "ORIGIN" => Ok(Self::ORIGIN),
@@ -555,7 +555,7 @@ impl UnifiedOpcode {
             "RETURNDATASIZE" => Ok(Self::RETURNDATASIZE),
             "RETURNDATACOPY" => Ok(Self::RETURNDATACOPY),
             "EXTCODEHASH" => Ok(Self::EXTCODEHASH),
-            
+
             "BLOCKHASH" => Ok(Self::BLOCKHASH),
             "COINBASE" => Ok(Self::COINBASE),
             "TIMESTAMP" => Ok(Self::TIMESTAMP),
@@ -565,7 +565,7 @@ impl UnifiedOpcode {
             "CHAINID" => Ok(Self::CHAINID),
             "SELFBALANCE" => Ok(Self::SELFBALANCE),
             "BASEFEE" => Ok(Self::BASEFEE),
-            
+
             "POP" => Ok(Self::POP),
             "MLOAD" => Ok(Self::MLOAD),
             "MSTORE" => Ok(Self::MSTORE),
@@ -582,13 +582,13 @@ impl UnifiedOpcode {
             "TSTORE" => Ok(Self::TSTORE),
             "MCOPY" => Ok(Self::MCOPY),
             "PUSH0" => Ok(Self::PUSH0),
-            
+
             "LOG0" => Ok(Self::LOG0),
             "LOG1" => Ok(Self::LOG1),
             "LOG2" => Ok(Self::LOG2),
             "LOG3" => Ok(Self::LOG3),
             "LOG4" => Ok(Self::LOG4),
-            
+
             "CREATE" => Ok(Self::CREATE),
             "CALL" => Ok(Self::CALL),
             "CALLCODE" => Ok(Self::CALLCODE),
@@ -599,7 +599,7 @@ impl UnifiedOpcode {
             "REVERT" => Ok(Self::REVERT),
             "INVALID" => Ok(Self::INVALID),
             "SELFDESTRUCT" => Ok(Self::SELFDESTRUCT),
-            
+
             // Handle PUSH, DUP, SWAP with numbers
             s if s.starts_with("PUSH") => {
                 if s == "PUSH0" {
@@ -611,21 +611,19 @@ impl UnifiedOpcode {
                     .map(Self::PUSH)
                     .ok_or_else(|| format!("Invalid PUSH opcode: {}", s))
             }
-            s if s.starts_with("DUP") => {
-                s.strip_prefix("DUP")
-                    .and_then(|n_str| n_str.parse::<u8>().ok())
-                    .filter(|&n| n >= 1 && n <= 16)
-                    .map(Self::DUP)
-                    .ok_or_else(|| format!("Invalid DUP opcode: {}", s))
-            }
-            s if s.starts_with("SWAP") => {
-                s.strip_prefix("SWAP")
-                    .and_then(|n_str| n_str.parse::<u8>().ok())
-                    .filter(|&n| n >= 1 && n <= 16)
-                    .map(Self::SWAP)
-                    .ok_or_else(|| format!("Invalid SWAP opcode: {}", s))
-            }
-            
+            s if s.starts_with("DUP") => s
+                .strip_prefix("DUP")
+                .and_then(|n_str| n_str.parse::<u8>().ok())
+                .filter(|&n| n >= 1 && n <= 16)
+                .map(Self::DUP)
+                .ok_or_else(|| format!("Invalid DUP opcode: {}", s)),
+            s if s.starts_with("SWAP") => s
+                .strip_prefix("SWAP")
+                .and_then(|n_str| n_str.parse::<u8>().ok())
+                .filter(|&n| n >= 1 && n <= 16)
+                .map(Self::SWAP)
+                .ok_or_else(|| format!("Invalid SWAP opcode: {}", s)),
+
             _ => Err(format!("Unknown opcode: {}", s)),
         }
     }
