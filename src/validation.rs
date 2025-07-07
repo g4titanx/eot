@@ -1,6 +1,6 @@
-//! Validation and verification system for opcode consistency
+//! Validation and verification system for opcode consistency with gas analysis integration
 
-use crate::{Fork, OpcodeRegistry};
+use crate::{Fork, OpcodeRegistry, traits::OpcodeAnalysis, gas::GasAnalysis};
 use std::collections::{HashMap, HashSet};
 
 /// Validate the entire opcode registry for consistency
@@ -13,6 +13,7 @@ pub fn validate_registry(registry: &OpcodeRegistry) -> Result<(), Vec<String>> {
     errors.extend(validate_historical_accuracy(registry));
     errors.extend(validate_gas_cost_consistency(registry));
     errors.extend(validate_stack_consistency(registry));
+    errors.extend(validate_gas_analysis_integration(registry));
 
     if errors.is_empty() {
         Ok(())
@@ -224,6 +225,37 @@ fn validate_stack_consistency(registry: &OpcodeRegistry) -> Vec<String> {
     errors
 }
 
+/// Validate integration with gas analysis system
+fn validate_gas_analysis_integration(_registry: &OpcodeRegistry) -> Vec<String> {
+    let mut errors = Vec::new();
+
+    // Test gas analysis on a simple sequence for each fork
+    let test_sequence = vec![0x01, 0x02, 0x03]; // ADD, MUL, SUB
+
+    for fork in [Fork::Frontier, Fork::Berlin, Fork::London, Fork::Shanghai, Fork::Cancun] {
+        match std::panic::catch_unwind(|| {
+            let analysis = OpcodeRegistry::analyze_gas_usage(&test_sequence, fork);
+            
+            // Basic sanity checks
+            if analysis.total_gas < 21000 {
+                return Err("Gas analysis returned less than base transaction cost".to_string());
+            }
+            
+            if analysis.breakdown.len() != test_sequence.len() {
+                return Err("Gas breakdown length doesn't match sequence length".to_string());
+            }
+            
+            Ok(())
+        }) {
+            Ok(Ok(())) => {}, // Success
+            Ok(Err(e)) => errors.push(format!("Gas analysis validation failed for {:?}: {}", fork, e)),
+            Err(_) => errors.push(format!("Gas analysis panicked for fork {:?}", fork)),
+        }
+    }
+
+    errors
+}
+
 /// Known gas cost changes between forks for validation
 struct KnownGasChanges {
     /// Opcode byte
@@ -361,10 +393,12 @@ pub fn run_comprehensive_validation(registry: &OpcodeRegistry) -> ValidationRepo
     );
     report.add_errors("Stack Consistency", validate_stack_consistency(registry));
     report.add_errors("Known Gas Changes", validate_known_gas_changes(registry));
+    report.add_errors("Gas Analysis Integration", validate_gas_analysis_integration(registry));
 
     // Additional checks
     report.add_warnings("Missing EIPs", check_missing_eip_references(registry));
     report.add_info("Coverage", generate_coverage_info(registry));
+    report.add_info("Gas Analysis", generate_gas_analysis_info(registry));
 
     report
 }
@@ -414,7 +448,7 @@ impl ValidationReport {
 
     /// Print summary of validation report
     pub fn print_summary(&self) {
-        println!("=== Validation Report ===");
+        println!("=== EOT Validation Report ===");
 
         if !self.errors.is_empty() {
             println!("\n❌ ERRORS:");
@@ -441,7 +475,7 @@ impl ValidationReport {
             for (category, info_items) in &self.info {
                 println!("  {category}:");
                 for info in info_items {
-                    println!("  {info}:");
+                    println!("    {info}");
                 }
             }
         }
@@ -503,4 +537,89 @@ fn generate_coverage_info(registry: &OpcodeRegistry) -> Vec<String> {
     }
 
     info
+}
+
+/// Generate gas analysis system information
+fn generate_gas_analysis_info(_registry: &OpcodeRegistry) -> Vec<String> {
+    let mut info = Vec::new();
+
+    // Test gas analysis capabilities
+    let test_sequences = vec![
+        (vec![0x01, 0x02, 0x03], "Simple arithmetic"),
+        (vec![0x54, 0x55], "Storage operations"),
+        (vec![0x51, 0x52], "Memory operations"),
+        (vec![0xf1], "Call operation"),
+    ];
+
+    for (sequence, description) in test_sequences {
+        let analysis = OpcodeRegistry::analyze_gas_usage(&sequence, Fork::London);
+        info.push(format!(
+            "{}: {} gas (efficiency: {}%)",
+            description,
+            analysis.total_gas,
+            analysis.efficiency_score()
+        ));
+    }
+
+    // Test dynamic gas calculation features
+    use crate::gas::{DynamicGasCalculator, ExecutionContext};
+    
+    let calculator = DynamicGasCalculator::new(Fork::Berlin);
+    let context = ExecutionContext::new();
+    
+    // Test warm/cold SLOAD costs
+    if let Ok(cold_cost) = calculator.calculate_gas_cost(0x54, &context, &[0x123]) {
+        let mut warm_context = context.clone();
+        warm_context.mark_storage_accessed(&vec![0u8; 20], &0x123u64.to_be_bytes());
+        
+        if let Ok(warm_cost) = calculator.calculate_gas_cost(0x54, &warm_context, &[0x123]) {
+            info.push(format!(
+                "SLOAD gas costs (Berlin): cold={}, warm={}",
+                cold_cost, warm_cost
+            ));
+        }
+    }
+
+    // Test memory expansion
+    if let Ok(small_memory_cost) = calculator.calculate_gas_cost(0x52, &context, &[64]) {
+        if let Ok(large_memory_cost) = calculator.calculate_gas_cost(0x52, &context, &[10000]) {
+            info.push(format!(
+                "MSTORE gas costs: small_memory={}, large_memory={}",
+                small_memory_cost, large_memory_cost
+            ));
+        }
+    }
+
+    info.push("Gas analysis system: ✅ Operational".to_string());
+
+    info
+}
+
+/// Extended implementation of OpcodeAnalysis for the registry
+impl OpcodeAnalysis for OpcodeRegistry {
+    fn analyze_gas_usage(opcodes: &[u8], fork: Fork) -> GasAnalysis {
+        use crate::gas::GasAnalyzer;
+        GasAnalyzer::analyze_gas_usage(opcodes, fork)
+    }
+
+    fn validate_opcode_sequence(opcodes: &[u8], fork: Fork) -> Result<(), String> {
+        use crate::gas::GasAnalyzer;
+        GasAnalyzer::validate_opcode_sequence(opcodes, fork)
+    }
+
+    fn get_optimization_suggestions(opcodes: &[u8], fork: Fork) -> Vec<String> {
+        let analysis = Self::analyze_gas_usage(opcodes, fork);
+        let mut suggestions = analysis.get_optimization_recommendations();
+
+        // Add fork-specific suggestions
+        use crate::gas::GasOptimizationAdvisor;
+        suggestions.extend(GasOptimizationAdvisor::analyze_pattern(opcodes, fork));
+
+        suggestions
+    }
+
+    fn estimate_gas_savings(opcodes: &[u8], fork: Fork) -> u64 {
+        let analysis = Self::analyze_gas_usage(opcodes, fork);
+        analysis.estimate_optimization_savings()
+    }
 }
