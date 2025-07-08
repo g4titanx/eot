@@ -2,43 +2,49 @@
 
 use std::collections::HashSet;
 
+/// Fixed-size address type (20 bytes)
+pub type Address = [u8; 20];
+
+/// Fixed-size storage key type (32 bytes)  
+pub type StorageKey = [u8; 32];
+
 /// Execution context that affects gas costs
-/// 
+///
 /// This tracks the state that influences dynamic gas pricing,
 /// particularly for EIP-2929 warm/cold access patterns.
 #[derive(Debug, Clone, Default)]
 pub struct ExecutionContext {
     /// Current memory size in bytes
     pub memory_size: usize,
-    
+
     /// Storage slots that have been accessed in this transaction (EIP-2929)
     /// Format: (address, storage_key)
-    pub accessed_storage_keys: HashSet<(Vec<u8>, Vec<u8>)>,
-    
+    pub accessed_storage_keys: HashSet<(Address, StorageKey)>,
+
     /// Addresses that have been accessed in this transaction (EIP-2929)
-    pub accessed_addresses: HashSet<Vec<u8>>,
-    
+    pub accessed_addresses: HashSet<Address>,
+
     /// Current call depth (affects gas availability)
     pub call_depth: u8,
-    
+
     /// Whether we're in a static call context (affects state modifications)
     pub is_static: bool,
-    
+
     /// Current gas price (for GASPRICE opcode)
     pub gas_price: u64,
-    
+
     /// Current block gas limit
     pub gas_limit: u64,
-    
+
     /// Available gas remaining in this execution
     pub gas_remaining: u64,
-    
+
     /// Current contract address (20 bytes)
-    pub current_address: Vec<u8>,
-    
+    pub current_address: Address,
+
     /// Caller address (20 bytes)  
-    pub caller_address: Vec<u8>,
-    
+    pub caller_address: Address,
+
     /// Value sent with the current call
     pub call_value: u64,
 }
@@ -55,30 +61,30 @@ impl ExecutionContext {
             gas_price: 20_000_000_000, // 20 gwei default
             gas_limit: 30_000_000,     // 30M gas default block limit
             gas_remaining: 1_000_000,  // 1M gas default for call
-            current_address: vec![0u8; 20],
-            caller_address: vec![0u8; 20],
+            current_address: [0u8; 20],
+            caller_address: [0u8; 20],
             call_value: 0,
         }
     }
 
     /// Mark a storage slot as accessed (warm)
-    pub fn mark_storage_accessed(&mut self, address: &[u8], key: &[u8]) {
-        self.accessed_storage_keys.insert((address.to_vec(), key.to_vec()));
+    pub fn mark_storage_accessed(&mut self, address: &Address, key: &StorageKey) {
+        self.accessed_storage_keys.insert((*address, *key));
     }
 
     /// Mark an address as accessed (warm)
-    pub fn mark_address_accessed(&mut self, address: &[u8]) {
-        self.accessed_addresses.insert(address.to_vec());
+    pub fn mark_address_accessed(&mut self, address: &Address) {
+        self.accessed_addresses.insert(*address);
     }
 
     /// Check if a storage slot has been accessed (is warm)
-    pub fn is_storage_warm(&self, address: &[u8], key: &[u8]) -> bool {
-        self.accessed_storage_keys.contains(&(address.to_vec(), key.to_vec()))
+    pub fn is_storage_warm(&self, address: &Address, key: &StorageKey) -> bool {
+        self.accessed_storage_keys.contains(&(*address, *key))
     }
 
     /// Check if an address has been accessed (is warm)  
-    pub fn is_address_warm(&self, address: &[u8]) -> bool {
-        self.accessed_addresses.contains(&address.to_vec())
+    pub fn is_address_warm(&self, address: &Address) -> bool {
+        self.accessed_addresses.contains(address)
     }
 
     /// Update memory size if the new size is larger
@@ -108,7 +114,10 @@ impl ExecutionContext {
     /// Consume gas from remaining amount
     pub fn consume_gas(&mut self, amount: u64) -> Result<(), String> {
         if self.gas_remaining < amount {
-            Err(format!("Out of gas: need {}, have {}", amount, self.gas_remaining))
+            Err(format!(
+                "Out of gas: need {}, have {}",
+                amount, self.gas_remaining
+            ))
         } else {
             self.gas_remaining -= amount;
             Ok(())
@@ -134,6 +143,22 @@ impl ExecutionContext {
     pub fn simulate(&self) -> Self {
         self.clone()
     }
+
+    /// Convert from old Vec<u8> format for compatibility
+    pub fn from_vec_address(addr: &[u8]) -> Address {
+        let mut address = [0u8; 20];
+        let len = addr.len().min(20);
+        address[..len].copy_from_slice(&addr[..len]);
+        address
+    }
+
+    /// Convert from old Vec<u8> format for compatibility
+    pub fn from_vec_storage_key(key: &[u8]) -> StorageKey {
+        let mut storage_key = [0u8; 32];
+        let len = key.len().min(32);
+        storage_key[..len].copy_from_slice(&key[..len]);
+        storage_key
+    }
 }
 
 /// Builder pattern for creating execution contexts
@@ -150,13 +175,13 @@ impl ExecutionContextBuilder {
     }
 
     /// Set the current contract address
-    pub fn with_address(mut self, address: Vec<u8>) -> Self {
+    pub fn with_address(mut self, address: Address) -> Self {
         self.context.current_address = address;
         self
     }
 
     /// Set the caller address
-    pub fn with_caller(mut self, caller: Vec<u8>) -> Self {
+    pub fn with_caller(mut self, caller: Address) -> Self {
         self.context.caller_address = caller;
         self
     }
@@ -176,7 +201,7 @@ impl ExecutionContextBuilder {
     }
 
     /// Pre-warm storage slots
-    pub fn with_warm_storage(mut self, slots: Vec<(Vec<u8>, Vec<u8>)>) -> Self {
+    pub fn with_warm_storage(mut self, slots: Vec<(Address, StorageKey)>) -> Self {
         for (addr, key) in slots {
             self.context.accessed_storage_keys.insert((addr, key));
         }
@@ -184,7 +209,7 @@ impl ExecutionContextBuilder {
     }
 
     /// Pre-warm addresses
-    pub fn with_warm_addresses(mut self, addresses: Vec<Vec<u8>>) -> Self {
+    pub fn with_warm_addresses(mut self, addresses: Vec<Address>) -> Self {
         for addr in addresses {
             self.context.accessed_addresses.insert(addr);
         }
@@ -216,11 +241,11 @@ mod tests {
     #[test]
     fn test_storage_warming() {
         let mut context = ExecutionContext::new();
-        let addr = vec![1u8; 20];
-        let key = vec![2u8; 32];
+        let addr = [1u8; 20]; // Use fixed-size array
+        let key = [2u8; 32]; // Use fixed-size array
 
         assert!(!context.is_storage_warm(&addr, &key));
-        
+
         context.mark_storage_accessed(&addr, &key);
         assert!(context.is_storage_warm(&addr, &key));
     }
@@ -228,10 +253,10 @@ mod tests {
     #[test]
     fn test_address_warming() {
         let mut context = ExecutionContext::new();
-        let addr = vec![1u8; 20];
+        let addr = [1u8; 20]; // Use fixed-size array
 
         assert!(!context.is_address_warm(&addr));
-        
+
         context.mark_address_accessed(&addr);
         assert!(context.is_address_warm(&addr));
     }
@@ -300,14 +325,14 @@ mod tests {
 
     #[test]
     fn test_context_builder() {
-        let addr = vec![1u8; 20];
-        let caller = vec![2u8; 20];
-        let storage_slots = vec![(addr.clone(), vec![3u8; 32])];
-        let warm_addresses = vec![addr.clone()];
+        let addr = [1u8; 20];
+        let caller = [2u8; 20];
+        let storage_slots = vec![(addr, [3u8; 32])];
+        let warm_addresses = vec![addr];
 
         let context = ExecutionContextBuilder::new()
-            .with_address(addr.clone())
-            .with_caller(caller.clone())
+            .with_address(addr)
+            .with_caller(caller)
             .with_value(1000)
             .with_gas(500000, 20_000_000_000, 30_000_000)
             .with_warm_storage(storage_slots)

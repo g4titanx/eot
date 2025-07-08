@@ -1,6 +1,6 @@
 //! Validation and verification system for opcode consistency with gas analysis integration
 
-use crate::{Fork, OpcodeRegistry, traits::OpcodeAnalysis, gas::GasAnalysis};
+use crate::{gas::GasAnalysis, traits::OpcodeAnalysis, Fork, OpcodeRegistry};
 use std::collections::{HashMap, HashSet};
 
 /// Validate the entire opcode registry for consistency
@@ -232,24 +232,30 @@ fn validate_gas_analysis_integration(_registry: &OpcodeRegistry) -> Vec<String> 
     // Test gas analysis on a simple sequence for each fork
     let test_sequence = vec![0x01, 0x02, 0x03]; // ADD, MUL, SUB
 
-    for fork in [Fork::Frontier, Fork::Berlin, Fork::London, Fork::Shanghai, Fork::Cancun] {
+    for fork in [
+        Fork::Frontier,
+        Fork::Berlin,
+        Fork::London,
+        Fork::Shanghai,
+        Fork::Cancun,
+    ] {
         match std::panic::catch_unwind(|| {
             let analysis = OpcodeRegistry::analyze_gas_usage(&test_sequence, fork);
-            
+
             // Basic sanity checks
             if analysis.total_gas < 21000 {
                 return Err("Gas analysis returned less than base transaction cost".to_string());
             }
-            
+
             if analysis.breakdown.len() != test_sequence.len() {
                 return Err("Gas breakdown length doesn't match sequence length".to_string());
             }
-            
+
             Ok(())
         }) {
-            Ok(Ok(())) => {}, // Success
-            Ok(Err(e)) => errors.push(format!("Gas analysis validation failed for {:?}: {}", fork, e)),
-            Err(_) => errors.push(format!("Gas analysis panicked for fork {:?}", fork)),
+            Ok(Ok(())) => {} // Success
+            Ok(Err(e)) => errors.push(format!("Gas analysis validation failed for {fork:?}: {e}")),
+            Err(_) => errors.push(format!("Gas analysis panicked for fork {fork:?}")),
         }
     }
 
@@ -393,7 +399,10 @@ pub fn run_comprehensive_validation(registry: &OpcodeRegistry) -> ValidationRepo
     );
     report.add_errors("Stack Consistency", validate_stack_consistency(registry));
     report.add_errors("Known Gas Changes", validate_known_gas_changes(registry));
-    report.add_errors("Gas Analysis Integration", validate_gas_analysis_integration(registry));
+    report.add_errors(
+        "Gas Analysis Integration",
+        validate_gas_analysis_integration(registry),
+    );
 
     // Additional checks
     report.add_warnings("Missing EIPs", check_missing_eip_references(registry));
@@ -563,19 +572,27 @@ fn generate_gas_analysis_info(_registry: &OpcodeRegistry) -> Vec<String> {
 
     // Test dynamic gas calculation features
     use crate::gas::{DynamicGasCalculator, ExecutionContext};
-    
+
     let calculator = DynamicGasCalculator::new(Fork::Berlin);
     let context = ExecutionContext::new();
-    
+
     // Test warm/cold SLOAD costs
     if let Ok(cold_cost) = calculator.calculate_gas_cost(0x54, &context, &[0x123]) {
         let mut warm_context = context.clone();
-        warm_context.mark_storage_accessed(&vec![0u8; 20], &0x123u64.to_be_bytes());
-        
+
+        // Fix: Use proper array conversion for storage accessed marking
+        let address = [0u8; 20]; // Use fixed-size array for address
+        let key = {
+            let mut storage_key = [0u8; 32];
+            let key_bytes = 0x123u64.to_be_bytes();
+            storage_key[24..32].copy_from_slice(&key_bytes); // Put the u64 in the last 8 bytes
+            storage_key
+        };
+        warm_context.mark_storage_accessed(&address, &key);
+
         if let Ok(warm_cost) = calculator.calculate_gas_cost(0x54, &warm_context, &[0x123]) {
             info.push(format!(
-                "SLOAD gas costs (Berlin): cold={}, warm={}",
-                cold_cost, warm_cost
+                "SLOAD gas costs (Berlin): cold={cold_cost}, warm={warm_cost}"
             ));
         }
     }
@@ -584,8 +601,7 @@ fn generate_gas_analysis_info(_registry: &OpcodeRegistry) -> Vec<String> {
     if let Ok(small_memory_cost) = calculator.calculate_gas_cost(0x52, &context, &[64]) {
         if let Ok(large_memory_cost) = calculator.calculate_gas_cost(0x52, &context, &[10000]) {
             info.push(format!(
-                "MSTORE gas costs: small_memory={}, large_memory={}",
-                small_memory_cost, large_memory_cost
+                "MSTORE gas costs: small_memory={small_memory_cost}, large_memory={large_memory_cost}"
             ));
         }
     }

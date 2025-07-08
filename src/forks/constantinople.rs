@@ -493,7 +493,7 @@ opcodes! {
             introduced_in: Frontier,
             group: StackMemoryStorageFlow,
             eip: None,
-            gas_history: [],
+            gas_history: [Constantinople => 5000],
         },
         0x56 => JUMP {
             gas: 8,

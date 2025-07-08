@@ -1,6 +1,9 @@
 //! Core traits for EVM opcode table system with gas analysis integration
 
-use crate::{Fork, gas::{ExecutionContext, GasCostCategory, DynamicGasCalculator, GasAnalysis}};
+use crate::{
+    gas::{DynamicGasCalculator, ExecutionContext, GasAnalysis, GasCostCategory},
+    Fork,
+};
 
 /// Extended trait for opcodes with additional utilities including gas analysis
 pub trait OpcodeExt: crate::OpCode {
@@ -77,7 +80,11 @@ pub trait OpcodeExt: crate::OpCode {
     }
 
     /// Calculate dynamic gas cost for this opcode
-    fn calculate_gas_cost(&self, context: &ExecutionContext, operands: &[u64]) -> Result<u64, String> {
+    fn calculate_gas_cost(
+        &self,
+        context: &ExecutionContext,
+        operands: &[u64],
+    ) -> Result<u64, String> {
         let calculator = DynamicGasCalculator::new(Self::fork());
         calculator.calculate_gas_cost((*self).into(), context, operands)
     }
@@ -121,7 +128,7 @@ pub trait OpcodeExt: crate::OpCode {
             0xf3 | // RETURN
             0xfd | // REVERT
             0xfe | // INVALID
-            0xff   // SELFDESTRUCT
+            0xff // SELFDESTRUCT
         )
     }
 
@@ -143,7 +150,7 @@ pub trait OpcodeExt: crate::OpCode {
         matches!(
             (*self).into(),
             0x54 | 0x55 | // SLOAD, SSTORE
-            0x5c | 0x5d   // TLOAD, TSTORE
+            0x5c | 0x5d // TLOAD, TSTORE
         )
     }
 
@@ -157,7 +164,7 @@ pub trait OpcodeExt: crate::OpCode {
         matches!(
             (*self).into(),
             0xf2 | // CALLCODE (use DELEGATECALL instead)
-            0xff   // SELFDESTRUCT (being phased out)
+            0xff // SELFDESTRUCT (being phased out)
         )
     }
 
@@ -169,26 +176,38 @@ pub trait OpcodeExt: crate::OpCode {
         match opcode {
             0x60 if Self::fork() >= Fork::Shanghai => {
                 // PUSH1 0x00 can be replaced with PUSH0
-                recommendations.push("Consider using PUSH0 instead of PUSH1 0x00 to save gas".to_string());
+                recommendations
+                    .push("Consider using PUSH0 instead of PUSH1 0x00 to save gas".to_string());
             }
             0x54 => {
-                recommendations.push("Consider caching SLOAD results in memory if used multiple times".to_string());
+                recommendations.push(
+                    "Consider caching SLOAD results in memory if used multiple times".to_string(),
+                );
                 if Self::fork() >= Fork::Berlin {
-                    recommendations.push("Pre-warm storage slots when possible to benefit from lower gas costs".to_string());
+                    recommendations.push(
+                        "Pre-warm storage slots when possible to benefit from lower gas costs"
+                            .to_string(),
+                    );
                 }
             }
             0x55 => {
-                recommendations.push("Consider using TSTORE for temporary values that don't need persistence".to_string());
-                recommendations.push("Pack storage variables to minimize SSTORE operations".to_string());
+                recommendations.push(
+                    "Consider using TSTORE for temporary values that don't need persistence"
+                        .to_string(),
+                );
+                recommendations
+                    .push("Pack storage variables to minimize SSTORE operations".to_string());
             }
             0xf1 | 0xf2 | 0xf4 | 0xfa => {
-                recommendations.push("Minimize external calls as they are expensive and can fail".to_string());
+                recommendations
+                    .push("Minimize external calls as they are expensive and can fail".to_string());
                 if Self::fork() >= Fork::Berlin {
                     recommendations.push("Pre-warm target addresses when possible".to_string());
                 }
             }
             0xf0 | 0xf5 => {
-                recommendations.push("Consider using CREATE2 for deterministic addresses".to_string());
+                recommendations
+                    .push("Consider using CREATE2 for deterministic addresses".to_string());
                 if Self::fork() >= Fork::Shanghai {
                     recommendations.push("Be aware of initcode size limits (EIP-3860)".to_string());
                 }
@@ -278,21 +297,24 @@ impl OpcodeComparison for crate::OpcodeRegistry {
     }
 
     fn get_changes_between_forks(fork1: Fork, fork2: Fork) -> Vec<OpcodeChange> {
-        use crate::gas::{GasComparator, analysis::{ChangeType as GasChangeType}};
-        
+        use crate::gas::{analysis::ChangeType as GasChangeType, GasComparator};
+
         let gas_changes = GasComparator::get_changes_between_forks(fork1, fork2);
-        gas_changes.into_iter().map(|gc| OpcodeChange {
-            opcode: gc.opcode,
-            change_type: match gc.change_type {
-                GasChangeType::Added => ChangeType::Added,
-                GasChangeType::Removed => ChangeType::Removed,
-                GasChangeType::GasCostChanged => ChangeType::GasCostChanged,
-                GasChangeType::StackBehaviorChanged => ChangeType::StackBehaviorChanged,
-                GasChangeType::SemanticsChanged => ChangeType::SemanticsChanged,
-            },
-            old_value: gc.old_value,
-            new_value: gc.new_value,
-        }).collect()
+        gas_changes
+            .into_iter()
+            .map(|gc| OpcodeChange {
+                opcode: gc.opcode,
+                change_type: match gc.change_type {
+                    GasChangeType::Added => ChangeType::Added,
+                    GasChangeType::Removed => ChangeType::Removed,
+                    GasChangeType::GasCostChanged => ChangeType::GasCostChanged,
+                    GasChangeType::StackBehaviorChanged => ChangeType::StackBehaviorChanged,
+                    GasChangeType::SemanticsChanged => ChangeType::SemanticsChanged,
+                },
+                old_value: gc.old_value,
+                new_value: gc.new_value,
+            })
+            .collect()
     }
 }
 
@@ -350,7 +372,7 @@ mod tests {
     fn test_optimization_recommendations() {
         let sload_opcode = Berlin::SLOAD;
         let recommendations = sload_opcode.optimization_recommendations();
-        
+
         assert!(!recommendations.is_empty());
         assert!(recommendations.iter().any(|r| r.contains("caching")));
     }

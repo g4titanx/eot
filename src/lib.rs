@@ -52,8 +52,7 @@ pub use validation::*;
 // Gas analysis system
 pub mod gas;
 pub use gas::{
-    DynamicGasCalculator, ExecutionContext, GasAnalysisResult,
-    GasCostCategory, GasAnalysis,
+    DynamicGasCalculator, ExecutionContext, GasAnalysis, GasAnalysisResult, GasCostCategory,
 };
 
 // Unified opcodes feature for bytecode manipulation tools
