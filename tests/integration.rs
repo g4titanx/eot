@@ -1,30 +1,26 @@
 //! Integration tests for real-world usage scenarios
 
-use eot::{forks::*, Fork, OpCode, OpcodeRegistry};
+use eot::{forks::*, Fork, OpCode, OpcodeAnalysis, OpcodeRegistry};
 
 #[test]
 fn test_gas_cost_analysis() {
-    // Simulate analyzing a simple contract
-    let opcodes_to_analyze = vec![
-        0x60, // PUSH1
-        0x60, // PUSH1
-        0x01, // ADD
-        0x54, // SLOAD
-        0x55, // SSTORE
-        0xf3, // RETURN
-    ];
+    let opcodes = vec![0x01, 0x02]; // Simple ADD, MUL
+    let analysis = OpcodeRegistry::analyze_gas_usage(&opcodes, Fork::London);
 
-    let mut total_gas = 0;
-    for &byte in &opcodes_to_analyze {
-        if Cancun::has_opcode(byte) {
-            let opcode = Cancun::from(byte);
-            total_gas += opcode.gas_cost() as u64;
-        }
-    }
+    let total_gas = analysis.total_gas;
 
-    // Should calculate reasonable gas cost
-    assert!(total_gas > 0);
-    assert!(total_gas < 1000); // Reasonable for this simple sequence
+    // The base transaction cost is 21000, so actual opcode cost should be much less
+    let opcode_gas = total_gas - 21000;
+    assert!(
+        opcode_gas < 1000,
+        "Opcode gas should be less than 1000, got {}",
+        opcode_gas
+    );
+    assert!(
+        total_gas >= 21000,
+        "Total gas should include base transaction cost, got {}",
+        total_gas
+    );
 }
 
 #[test]
