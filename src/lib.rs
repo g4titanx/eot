@@ -1,38 +1,6 @@
 //! # EOT - EVM Opcode Table
 //!
-//! A Rust implementation of EVM opcodes for all Ethereum forks,
-//! with complete fork inheritance, validation, and metadata.
-//!
-//! ## Features
-//!
-//! - **Complete Fork Support**: All Ethereum forks from Frontier to Cancun
-//! - **Dynamic Gas Analysis**: Context-aware gas cost calculation with EIP support
-//! - **Optimization Analysis**: Automatic detection of gas inefficiencies
-//! - **Historical Tracking**: Gas cost evolution across forks
-//! - **Comprehensive Validation**: Ensures opcode consistency and accuracy
-//!
-//! ## Quick Start
-//!
-//! ```rust
-//! use eot::*;
-//! use eot::gas::*;
-//!
-//! // Basic opcode usage
-//! let registry = OpcodeRegistry::new();
-//! let opcodes = registry.get_opcodes(Fork::London);
-//!
-//! // Dynamic gas analysis
-//! let calculator = DynamicGasCalculator::new(Fork::London);
-//! let context = ExecutionContext::new();
-//! let gas_cost = calculator.calculate_gas_cost(0x54, &context, &[0x123])?;
-//!
-//! // Analyze gas usage for a sequence of opcodes
-//! let opcodes = vec![0x60, 0x01, 0x60, 0x02, 0x01]; // PUSH1 1, PUSH1 2, ADD
-//! let analysis = calculator.analyze_sequence_gas(&opcodes.into_iter().map(|op| (op, vec![])).collect())?;
-//! println!("Total gas: {}", analysis.total_gas);
-//! # Ok::<(), Box<dyn std::error::Error>>(())
-//! ```
-
+//! EVM opcodes library for all Ethereum forks, with complete fork inheritance, validation, and metadata
 #![deny(missing_docs)]
 #![warn(clippy::all)]
 

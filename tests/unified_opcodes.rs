@@ -4,6 +4,7 @@
 #![cfg(feature = "unified-opcodes")]
 
 use eot::UnifiedOpcode;
+use std::str::FromStr;
 
 #[test]
 fn test_parse_basic_opcodes() {

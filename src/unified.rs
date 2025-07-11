@@ -5,7 +5,11 @@
 //! analyzers, and parsers.
 
 use crate::{Fork, OpcodeRegistry};
+#[cfg(feature = "serde")]
+use serde::{Deserialize, Serialize};
+
 use std::fmt;
+use std::str::FromStr;
 
 /// Unified opcode enum that abstracts away fork-specific details
 ///
@@ -13,6 +17,7 @@ use std::fmt;
 /// while still allowing access to the rich metadata from the underlying
 /// fork-specific implementations when needed.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 pub enum UnifiedOpcode {
     // 0x00-0x0f: Stop and Arithmetic Operations
     /// Halts execution (0x00)
@@ -482,13 +487,13 @@ impl UnifiedOpcode {
     pub fn name(&self) -> String {
         match self {
             Self::PUSH0 => "PUSH0".to_string(),
-            Self::PUSH(n) => format!("PUSH{}", n),
-            Self::DUP(n) => format!("DUP{}", n),
-            Self::SWAP(n) => format!("SWAP{}", n),
-            Self::UNKNOWN(byte) => format!("UNKNOWN{:02x}", byte),
+            Self::PUSH(n) => format!("PUSH{n}"),
+            Self::DUP(n) => format!("DUP{n}"),
+            Self::SWAP(n) => format!("SWAP{n}"),
+            Self::UNKNOWN(byte) => format!("UNKNOWN{byte:02x}"),
             _ => {
                 // For known opcodes, use debug formatting and extract the name
-                format!("{:?}", self)
+                format!("{self:?}")
             }
         }
     }
@@ -513,9 +518,30 @@ impl UnifiedOpcode {
     pub fn metadata_latest(&self) -> Option<crate::OpcodeMetadata> {
         self.metadata(Fork::Cancun)
     }
+}
 
-    /// Parse an opcode from a string representation (for compatibility with existing tools)
-    pub fn from_str(s: &str) -> Result<Self, String> {
+impl fmt::Display for UnifiedOpcode {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{}", self.name())
+    }
+}
+
+impl From<u8> for UnifiedOpcode {
+    fn from(byte: u8) -> Self {
+        Self::from_byte(byte)
+    }
+}
+
+impl From<UnifiedOpcode> for u8 {
+    fn from(opcode: UnifiedOpcode) -> Self {
+        opcode.to_byte()
+    }
+}
+
+impl FromStr for UnifiedOpcode {
+    type Err = String;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
         match s {
             "STOP" => Ok(Self::STOP),
             "ADD" => Ok(Self::ADD),
@@ -619,42 +645,24 @@ impl UnifiedOpcode {
                 }
                 s.strip_prefix("PUSH")
                     .and_then(|n_str| n_str.parse::<u8>().ok())
-                    .filter(|&n| n >= 1 && n <= 32)
+                    .filter(|&n| (1..=32).contains(&n))
                     .map(Self::PUSH)
-                    .ok_or_else(|| format!("Invalid PUSH opcode: {}", s))
+                    .ok_or_else(|| format!("Invalid PUSH opcode: {s}"))
             }
             s if s.starts_with("DUP") => s
                 .strip_prefix("DUP")
                 .and_then(|n_str| n_str.parse::<u8>().ok())
-                .filter(|&n| n >= 1 && n <= 16)
+                .filter(|&n| (1..=16).contains(&n))
                 .map(Self::DUP)
-                .ok_or_else(|| format!("Invalid DUP opcode: {}", s)),
+                .ok_or_else(|| format!("Invalid DUP opcode: {s}")),
             s if s.starts_with("SWAP") => s
                 .strip_prefix("SWAP")
                 .and_then(|n_str| n_str.parse::<u8>().ok())
-                .filter(|&n| n >= 1 && n <= 16)
+                .filter(|&n| (1..=16).contains(&n))
                 .map(Self::SWAP)
-                .ok_or_else(|| format!("Invalid SWAP opcode: {}", s)),
+                .ok_or_else(|| format!("Invalid SWAP opcode: {s}")),
 
-            _ => Err(format!("Unknown opcode: {}", s)),
+            _ => Err(format!("Unknown opcode: {s}")),
         }
-    }
-}
-
-impl fmt::Display for UnifiedOpcode {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{}", self.name())
-    }
-}
-
-impl From<u8> for UnifiedOpcode {
-    fn from(byte: u8) -> Self {
-        Self::from_byte(byte)
-    }
-}
-
-impl From<UnifiedOpcode> for u8 {
-    fn from(opcode: UnifiedOpcode) -> Self {
-        opcode.to_byte()
     }
 }

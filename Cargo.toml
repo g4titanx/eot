@@ -1,6 +1,6 @@
 [package]
 name = "eot"
-version = "0.1.4"
+version = "0.1.5"
 edition = "2021"
 authors = ["alake"]
 license = "MIT"
@@ -9,12 +9,13 @@ documentation = "https://docs.rs/eot"
 homepage = "https://github.com/g4titanx/eot"
 repository = "https://github.com/g4titanx/eot"
 keywords = ["ethereum", "evm", "opcodes", "blockchain", "smart-contracts"]
-categories = ["cryptography::cryptocurrencies", "development-tools"]
+categories = ["cryptography::cryptocurrencies"]
 readme = "README.md"
 
 [features]
-default = ["std"]
-std = []
+default = ["unified-opcodes"]
 unified-opcodes = []
+serde = ["dep:serde"]
 
 [dependencies]
+serde = { version = "1.0", features = ["derive"], optional = true }

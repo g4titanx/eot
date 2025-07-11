@@ -4,11 +4,8 @@ This directory contains comprehensive examples demonstrating the capabilities of
 
 ## Examples Overview
 
-To run all examples:
+To run each examples:
 
 ```bash
-cargo run --example basic_usage
-cargo run --example advanced_analysis
-cargo run --example contract_analyzer
-cargo run --example registry_usage
+cargo run --example [example_name]
 ```
