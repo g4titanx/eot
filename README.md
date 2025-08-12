@@ -56,4 +56,4 @@ cargo tt
 
 ## Acknowledgments
 
-- [clearloop](github.com/clearloop) for [evm-opcodes](https://crates.io/crates/evm-opcodes)
+- [clearloop](https://github.com/clearloop) for [evm-opcodes](https://crates.io/crates/evm-opcodes)
