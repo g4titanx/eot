@@ -1,10 +1,10 @@
 [package]
 name = "eot"
-version = "0.1.5"
+version = "0.2.0"
 edition = "2021"
 authors = ["alake"]
 license = "MIT"
-description = "EVM opcodes library for all Ethereum forks, with complete fork inheritance, validation, and metadata"
+description = "EVM opcodes library with fork-aware gas costs, static metadata, and bytecode analysis"
 documentation = "https://docs.rs/eot"
 homepage = "https://github.com/g4titanx/eot"
 repository = "https://github.com/g4titanx/eot"
@@ -13,7 +13,7 @@ categories = ["cryptography::cryptocurrencies"]
 readme = "README.md"
 
 [features]
-default = ["unified-opcodes"]
+default = []
 unified-opcodes = []
 serde = ["dep:serde"]
 

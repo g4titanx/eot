@@ -1,260 +1,281 @@
-//! Unified opcode interface for bytecode manipulation tools
+//! Pattern-matchable opcode enum that wraps [`OpCode`].
 //!
-//! This module provides a simplified, fork-agnostic interface to EVM opcodes
-//! that's perfect for bytecode analysis and manipulation tools like obfuscators,
-//! analyzers, and parsers.
+//! Enable with the `unified-opcodes` feature. This provides a `UnifiedOpcode`
+//! enum with variants for every opcode — including parameterised `PUSH(n)`,
+//! `DUP(n)`, `SWAP(n)`, and `UNKNOWN(u8)` — so that downstream crates can
+//! `match` on opcodes directly.
+//!
+//! Conversion to/from [`OpCode`] is zero-cost via `From` impls.
 
-use crate::{Fork, OpcodeRegistry};
-#[cfg(feature = "serde")]
-use serde::{Deserialize, Serialize};
-
+use crate::{Fork, OpCode};
 use std::fmt;
 use std::str::FromStr;
 
-/// Unified opcode enum that abstracts away fork-specific details
+#[cfg(feature = "serde")]
+use serde::{Deserialize, Serialize};
+
+/// Pattern-matchable enum covering all EVM opcodes.
 ///
-/// This enum provides a simple interface for bytecode manipulation tools
-/// while still allowing access to the rich metadata from the underlying
-/// fork-specific implementations when needed.
+/// This is a thin wrapper over [`OpCode`] for crates that need `match`
+/// ergonomics (bytecode transforms, disassemblers, etc.). Use [`OpCode`]
+/// directly when you only need metadata lookups.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 pub enum UnifiedOpcode {
-    // 0x00-0x0f: Stop and Arithmetic Operations
+    // 0x00–0x0b: Stop and Arithmetic
     /// Halts execution (0x00)
     STOP,
-    /// Addition operation (0x01)
+    /// Addition (0x01)
     ADD,
-    /// Multiplication operation (0x02)
+    /// Multiplication (0x02)
     MUL,
-    /// Subtraction operation (0x03)
+    /// Subtraction (0x03)
     SUB,
-    /// Integer division operation (0x04)
+    /// Integer division (0x04)
     DIV,
-    /// Signed integer division operation (0x05)
+    /// Signed integer division (0x05)
     SDIV,
-    /// Modulo remainder operation (0x06)
+    /// Modulo (0x06)
     MOD,
-    /// Signed modulo remainder operation (0x07)
+    /// Signed modulo (0x07)
     SMOD,
-    /// Modulo addition operation (0x08)
+    /// Modulo addition (0x08)
     ADDMOD,
-    /// Modulo multiplication operation (0x09)
+    /// Modulo multiplication (0x09)
     MULMOD,
-    /// Exponential operation (0x0a)
+    /// Exponential (0x0a)
     EXP,
-    /// Extend length of two's complement signed integer (0x0b)
+    /// Sign-extend (0x0b)
     SIGNEXTEND,
 
-    // 0x10-0x1f: Comparison & Bitwise Logic Operations
-    /// Less-than comparison (0x10)
+    // 0x10–0x1e: Comparison & Bitwise Logic
+    /// Less-than (0x10)
     LT,
-    /// Greater-than comparison (0x11)
+    /// Greater-than (0x11)
     GT,
-    /// Signed less-than comparison (0x12)
+    /// Signed less-than (0x12)
     SLT,
-    /// Signed greater-than comparison (0x13)
+    /// Signed greater-than (0x13)
     SGT,
-    /// Equality comparison (0x14)
+    /// Equality (0x14)
     EQ,
-    /// Simple not operator (0x15)
+    /// Is zero (0x15)
     ISZERO,
-    /// Bitwise AND operation (0x16)
+    /// Bitwise AND (0x16)
     AND,
-    /// Bitwise OR operation (0x17)
+    /// Bitwise OR (0x17)
     OR,
-    /// Bitwise XOR operation (0x18)
+    /// Bitwise XOR (0x18)
     XOR,
-    /// Bitwise NOT operation (0x19)
+    /// Bitwise NOT (0x19)
     NOT,
-    /// Retrieve single byte from word (0x1a)
+    /// Retrieve single byte (0x1a)
     BYTE,
-    /// Left shift operation (0x1b)
+    /// Left shift (0x1b)
     SHL,
-    /// Logical right shift operation (0x1c)
+    /// Logical right shift (0x1c)
     SHR,
-    /// Arithmetic right shift operation (0x1d)
+    /// Arithmetic right shift (0x1d)
     SAR,
+    /// Count leading zeros (0x1e)
+    CLZ,
 
     // 0x20: SHA3
-    /// Compute Keccak-256 hash (0x20)
+    /// Keccak-256 hash (0x20)
     KECCAK256,
 
-    // 0x30-0x3f: Environmental Information
-    /// Get address of currently executing account (0x30)
+    // 0x30–0x3f: Environmental Information
+    /// Current address (0x30)
     ADDRESS,
-    /// Get balance of the given account (0x31)
+    /// Account balance (0x31)
     BALANCE,
-    /// Get execution origination address (0x32)
+    /// Transaction origin (0x32)
     ORIGIN,
-    /// Get caller address (0x33)
+    /// Caller address (0x33)
     CALLER,
-    /// Get deposited value by the instruction/transaction responsible for this execution (0x34)
+    /// Call value (0x34)
     CALLVALUE,
-    /// Get input data in current environment (0x35)
+    /// Load calldata (0x35)
     CALLDATALOAD,
-    /// Get size of input data in current environment (0x36)
+    /// Calldata size (0x36)
     CALLDATASIZE,
-    /// Copy input data in current environment to memory (0x37)
+    /// Copy calldata to memory (0x37)
     CALLDATACOPY,
-    /// Get size of code running in current environment (0x38)
+    /// Code size (0x38)
     CODESIZE,
-    /// Copy code running in current environment to memory (0x39)
+    /// Copy code to memory (0x39)
     CODECOPY,
-    /// Get price of gas in current environment (0x3a)
+    /// Gas price (0x3a)
     GASPRICE,
-    /// Get size of an account's code (0x3b)
+    /// External code size (0x3b)
     EXTCODESIZE,
-    /// Copy an account's code to memory (0x3c)
+    /// Copy external code (0x3c)
     EXTCODECOPY,
-    /// Get size of output data from the previous call from the current environment (0x3d)
+    /// Return data size (0x3d)
     RETURNDATASIZE,
-    /// Copy output data from the previous call to memory (0x3e)
+    /// Copy return data (0x3e)
     RETURNDATACOPY,
-    /// Get hash of an account's code (0x3f)
+    /// External code hash (0x3f)
     EXTCODEHASH,
 
-    // 0x40-0x4f: Block Information
-    /// Get the hash of one of the 256 most recent complete blocks (0x40)
+    // 0x40–0x4a: Block Information
+    /// Block hash (0x40)
     BLOCKHASH,
-    /// Get the block's beneficiary address (0x41)
+    /// Coinbase address (0x41)
     COINBASE,
-    /// Get the block's timestamp (0x42)
+    /// Block timestamp (0x42)
     TIMESTAMP,
-    /// Get the block's number (0x43)
+    /// Block number (0x43)
     NUMBER,
-    /// Get the block's difficulty (pre-Merge) / previous beacon chain randomness (post-Merge) (0x44)
+    /// Difficulty / PREVRANDAO (0x44)
     DIFFICULTY,
-    /// Get the block's gas limit (0x45)
+    /// Block gas limit (0x45)
     GASLIMIT,
-    /// Get the chain ID (0x46)
+    /// Chain ID (0x46)
     CHAINID,
-    /// Get balance of currently executing account (0x47)
+    /// Self balance (0x47)
     SELFBALANCE,
-    /// Get the base fee (0x48)
+    /// Base fee (0x48)
     BASEFEE,
-    /// Get the versioned hash of the i-th blob (0x49, Cancun)
+    /// Blob hash (0x49)
     BLOBHASH,
-    /// Get the blob base fee (0x4a, Cancun)
+    /// Blob base fee (0x4a)
     BLOBBASEFEE,
 
-    // 0x50-0x5f: Stack, Memory, Storage and Flow Operations
-    /// Remove item from stack (0x50)
+    // 0x50–0x5f: Stack, Memory, Storage and Flow
+    /// Remove top of stack (0x50)
     POP,
-    /// Load word from memory (0x51)
+    /// Load from memory (0x51)
     MLOAD,
-    /// Save word to memory (0x52)
+    /// Store to memory (0x52)
     MSTORE,
-    /// Save byte to memory (0x53)
+    /// Store byte to memory (0x53)
     MSTORE8,
-    /// Load word from storage (0x54)
+    /// Load from storage (0x54)
     SLOAD,
-    /// Save word to storage (0x55)
+    /// Store to storage (0x55)
     SSTORE,
-    /// Alter the program counter (0x56)
+    /// Unconditional jump (0x56)
     JUMP,
-    /// Conditionally alter the program counter (0x57)
+    /// Conditional jump (0x57)
     JUMPI,
-    /// Get the value of the program counter prior to the increment (0x58)
+    /// Program counter (0x58)
     PC,
-    /// Get the size of active memory in bytes (0x59)
+    /// Memory size (0x59)
     MSIZE,
-    /// Get the amount of available gas (0x5a)
+    /// Available gas (0x5a)
     GAS,
-    /// Mark a valid destination for jumps (0x5b)
+    /// Jump destination marker (0x5b)
     JUMPDEST,
-    /// Load word from transient storage (0x5c, Cancun)
+    /// Transient storage load (0x5c)
     TLOAD,
-    /// Save word to transient storage (0x5d, Cancun)
+    /// Transient storage store (0x5d)
     TSTORE,
-    /// Copy memory from one location to another (0x5e, Cancun)
+    /// Memory copy (0x5e)
     MCOPY,
-    /// Place 0 byte item on stack (0x5f, Shanghai)
+    /// Push zero (0x5f)
     PUSH0,
 
-    // 0x60-0x7f: Push Operations
-    /// Place n-byte item on stack (PUSH1-PUSH32, 1-32 bytes)
+    // 0x60–0x7f: Push Operations (parameterised)
+    /// Push 1–32 bytes onto stack
     PUSH(u8),
 
-    // 0x80-0x8f: Duplication Operations
-    /// Duplicate nth stack item (DUP1-DUP16)
+    // 0x80–0x8f: Duplication Operations (parameterised)
+    /// Duplicate nth stack item (1–16)
     DUP(u8),
 
-    // 0x90-0x9f: Exchange Operations
-    /// Exchange 1st and nth stack items (SWAP1-SWAP16)
+    // 0x90–0x9f: Exchange Operations (parameterised)
+    /// Swap top with nth stack item (1–16)
     SWAP(u8),
 
-    // 0xa0-0xa4: Logging Operations
-    /// Append log record with no topics (0xa0)
+    // 0xa0–0xa4: Logging
+    /// Log with 0 topics (0xa0)
     LOG0,
-    /// Append log record with one topic (0xa1)
+    /// Log with 1 topic (0xa1)
     LOG1,
-    /// Append log record with two topics (0xa2)
+    /// Log with 2 topics (0xa2)
     LOG2,
-    /// Append log record with three topics (0xa3)
+    /// Log with 3 topics (0xa3)
     LOG3,
-    /// Append log record with four topics (0xa4)
+    /// Log with 4 topics (0xa4)
     LOG4,
 
-    // 0xf0-0xff: System Operations
-    /// Create a new account with associated code (0xf0)
+    // 0xd0–0xd3: EOF Data Section Access
+    /// Load from data section (0xd0)
+    DATALOAD,
+    /// Load from data section, immediate index (0xd1)
+    DATALOADN,
+    /// Data section size (0xd2)
+    DATASIZE,
+    /// Copy from data section (0xd3)
+    DATACOPY,
+
+    // 0xe0–0xe8: EOF Control Flow & Stack
+    /// Relative jump (0xe0)
+    RJUMP,
+    /// Relative conditional jump (0xe1)
+    RJUMPI,
+    /// Relative jump via table (0xe2)
+    RJUMPV,
+    /// Call function (0xe3)
+    CALLF,
+    /// Return from function (0xe4)
+    RETF,
+    /// Jump to function (0xe5)
+    JUMPF,
+    /// Duplicate nth stack item — EOF extended (0xe6)
+    DUPN,
+    /// Swap with nth stack item — EOF extended (0xe7)
+    SWAPN,
+    /// Exchange stack items (0xe8)
+    EXCHANGE,
+
+    // 0xec, 0xee: EOF Contract Creation
+    /// Create EOF contract (0xec)
+    EOFCREATE,
+    /// Return new contract (0xee)
+    RETURNCONTRACT,
+
+    // 0xf0–0xff: System Operations
+    /// Create contract (0xf0)
     CREATE,
-    /// Message-call into an account (0xf1)
+    /// Message call (0xf1)
     CALL,
-    /// Message-call into this account with alternative account's code (0xf2)
+    /// Call with alternative code (0xf2)
     CALLCODE,
-    /// Halt execution returning output data (0xf3)
+    /// Halt and return data (0xf3)
     RETURN,
-    /// Message-call into an account with caller's code (0xf4)
+    /// Delegate call (0xf4)
     DELEGATECALL,
-    /// Create a new account with associated code at a predictable address (0xf5)
+    /// Create at deterministic address (0xf5)
     CREATE2,
-    /// Static message-call into an account (0xfa)
+    /// Load word from return data (0xf7)
+    RETURNDATALOAD,
+    /// EOF external call (0xf8)
+    EXTCALL,
+    /// EOF external delegate call (0xf9)
+    EXTDELEGATECALL,
+    /// Static message call (0xfa)
     STATICCALL,
-    /// Halt execution reverting state changes (0xfd)
+    /// EOF external static call (0xfb)
+    EXTSTATICCALL,
+    /// Halt and revert state (0xfd)
     REVERT,
-    /// Designated invalid instruction (0xfe)
+    /// Designated invalid (0xfe)
     INVALID,
-    /// Halt execution and register account for later deletion (0xff)
+    /// Halt and destroy account (0xff)
     SELFDESTRUCT,
 
-    /// Catch-all for unknown or unsupported opcodes
+    /// Unknown / unrecognised opcode byte.
     UNKNOWN(u8),
 }
 
+// ---------------------------------------------------------------------------
+// Conversion: byte → UnifiedOpcode
+// ---------------------------------------------------------------------------
+
 impl UnifiedOpcode {
-    /// Parse a byte into a unified opcode with immediate data size
-    /// Uses the latest fork (Cancun) by default for maximum compatibility
-    ///
-    /// # Returns
-    /// A tuple of (opcode, immediate_data_size)
-    ///
-    /// # Examples
-    /// ```
-    /// use eot::UnifiedOpcode;
-    ///
-    /// let (opcode, imm_size) = UnifiedOpcode::parse(0x60);
-    /// assert_eq!(opcode, UnifiedOpcode::PUSH(1));
-    /// assert_eq!(imm_size, 1);
-    /// ```
-    pub fn parse(byte: u8) -> (Self, usize) {
-        Self::parse_with_fork(byte, Fork::Cancun)
-    }
-
-    /// Parse a byte into a unified opcode for a specific fork
-    pub fn parse_with_fork(byte: u8, fork: Fork) -> (Self, usize) {
-        let registry = OpcodeRegistry::new();
-
-        if registry.is_opcode_available(fork, byte) {
-            let unified = Self::from_byte(byte);
-            let imm_size = Self::immediate_size(&unified);
-            (unified, imm_size)
-        } else {
-            (Self::UNKNOWN(byte), 0)
-        }
-    }
-
-    /// Convert a byte directly to a unified opcode (no fork checking)
-    /// This is faster but doesn't validate fork compatibility
+    /// Convert a raw byte to a `UnifiedOpcode`.
     pub fn from_byte(byte: u8) -> Self {
         match byte {
             0x00 => Self::STOP,
@@ -284,6 +305,7 @@ impl UnifiedOpcode {
             0x1b => Self::SHL,
             0x1c => Self::SHR,
             0x1d => Self::SAR,
+            0x1e => Self::CLZ,
 
             0x20 => Self::KECCAK256,
 
@@ -333,9 +355,9 @@ impl UnifiedOpcode {
             0x5e => Self::MCOPY,
             0x5f => Self::PUSH0,
 
-            0x60..=0x7f => Self::PUSH(byte - 0x5f), // PUSH1 to PUSH32
-            0x80..=0x8f => Self::DUP(byte - 0x7f),  // DUP1 to DUP16
-            0x90..=0x9f => Self::SWAP(byte - 0x8f), // SWAP1 to SWAP16
+            0x60..=0x7f => Self::PUSH(byte - 0x5f),
+            0x80..=0x8f => Self::DUP(byte - 0x7f),
+            0x90..=0x9f => Self::SWAP(byte - 0x8f),
 
             0xa0 => Self::LOG0,
             0xa1 => Self::LOG1,
@@ -343,13 +365,35 @@ impl UnifiedOpcode {
             0xa3 => Self::LOG3,
             0xa4 => Self::LOG4,
 
+            0xd0 => Self::DATALOAD,
+            0xd1 => Self::DATALOADN,
+            0xd2 => Self::DATASIZE,
+            0xd3 => Self::DATACOPY,
+
+            0xe0 => Self::RJUMP,
+            0xe1 => Self::RJUMPI,
+            0xe2 => Self::RJUMPV,
+            0xe3 => Self::CALLF,
+            0xe4 => Self::RETF,
+            0xe5 => Self::JUMPF,
+            0xe6 => Self::DUPN,
+            0xe7 => Self::SWAPN,
+            0xe8 => Self::EXCHANGE,
+
+            0xec => Self::EOFCREATE,
+            0xee => Self::RETURNCONTRACT,
+
             0xf0 => Self::CREATE,
             0xf1 => Self::CALL,
             0xf2 => Self::CALLCODE,
             0xf3 => Self::RETURN,
             0xf4 => Self::DELEGATECALL,
             0xf5 => Self::CREATE2,
+            0xf7 => Self::RETURNDATALOAD,
+            0xf8 => Self::EXTCALL,
+            0xf9 => Self::EXTDELEGATECALL,
             0xfa => Self::STATICCALL,
+            0xfb => Self::EXTSTATICCALL,
             0xfd => Self::REVERT,
             0xfe => Self::INVALID,
             0xff => Self::SELFDESTRUCT,
@@ -358,7 +402,7 @@ impl UnifiedOpcode {
         }
     }
 
-    /// Convert back to byte representation
+    /// Convert back to a raw byte.
     pub fn to_byte(&self) -> u8 {
         match self {
             Self::STOP => 0x00,
@@ -388,6 +432,7 @@ impl UnifiedOpcode {
             Self::SHL => 0x1b,
             Self::SHR => 0x1c,
             Self::SAR => 0x1d,
+            Self::CLZ => 0x1e,
 
             Self::KECCAK256 => 0x20,
 
@@ -447,82 +492,110 @@ impl UnifiedOpcode {
             Self::LOG3 => 0xa3,
             Self::LOG4 => 0xa4,
 
+            Self::DATALOAD => 0xd0,
+            Self::DATALOADN => 0xd1,
+            Self::DATASIZE => 0xd2,
+            Self::DATACOPY => 0xd3,
+
+            Self::RJUMP => 0xe0,
+            Self::RJUMPI => 0xe1,
+            Self::RJUMPV => 0xe2,
+            Self::CALLF => 0xe3,
+            Self::RETF => 0xe4,
+            Self::JUMPF => 0xe5,
+            Self::DUPN => 0xe6,
+            Self::SWAPN => 0xe7,
+            Self::EXCHANGE => 0xe8,
+
+            Self::EOFCREATE => 0xec,
+            Self::RETURNCONTRACT => 0xee,
+
             Self::CREATE => 0xf0,
             Self::CALL => 0xf1,
             Self::CALLCODE => 0xf2,
             Self::RETURN => 0xf3,
             Self::DELEGATECALL => 0xf4,
             Self::CREATE2 => 0xf5,
+            Self::RETURNDATALOAD => 0xf7,
+            Self::EXTCALL => 0xf8,
+            Self::EXTDELEGATECALL => 0xf9,
             Self::STATICCALL => 0xfa,
+            Self::EXTSTATICCALL => 0xfb,
             Self::REVERT => 0xfd,
             Self::INVALID => 0xfe,
             Self::SELFDESTRUCT => 0xff,
 
-            Self::UNKNOWN(byte) => *byte,
+            Self::UNKNOWN(b) => *b,
         }
     }
 
-    /// Check if this opcode affects control flow (for CFG construction)
-    pub fn is_control_flow(&self) -> bool {
-        matches!(
-            self,
-            Self::STOP
-                | Self::JUMP
-                | Self::JUMPI
-                | Self::JUMPDEST
-                | Self::RETURN
-                | Self::REVERT
-                | Self::INVALID
-                | Self::SELFDESTRUCT
-                | Self::CREATE
-                | Self::CREATE2
-                | Self::CALL
-                | Self::CALLCODE
-                | Self::DELEGATECALL
-                | Self::STATICCALL
-        )
+    /// Parse a byte, returning `(opcode, immediate_data_size)`.
+    pub fn parse(byte: u8) -> (Self, usize) {
+        let op = Self::from_byte(byte);
+        let imm = match &op {
+            Self::PUSH(n) => *n as usize,
+            _ => {
+                // fall back to OpCode table for EOF immediates etc.
+                OpCode::from_byte(byte)
+                    .info()
+                    .map(|i| i.immediate_size as usize)
+                    .unwrap_or(0)
+            }
+        };
+        (op, imm)
     }
 
-    /// Get the name of this opcode as a string
+    /// Parse with fork validation — returns `UNKNOWN` if not valid at `fork`.
+    pub fn parse_with_fork(byte: u8, fork: Fork) -> (Self, usize) {
+        let op = OpCode::from_byte(byte);
+        if op.is_valid_in(fork) {
+            Self::parse(byte)
+        } else {
+            (Self::UNKNOWN(byte), 0)
+        }
+    }
+
+    /// Returns `true` if this is an unknown / unrecognised opcode.
+    pub fn is_unknown(&self) -> bool {
+        matches!(self, Self::UNKNOWN(_))
+    }
+
+    /// Returns `true` if this opcode affects control flow.
+    pub fn is_control_flow(&self) -> bool {
+        OpCode::from_byte(self.to_byte()).is_control_flow()
+    }
+
+    /// Get the underlying [`OpCode`] for metadata lookups.
+    pub fn as_opcode(&self) -> OpCode {
+        OpCode::from_byte(self.to_byte())
+    }
+
+    /// Get opcode name as a string.
     pub fn name(&self) -> String {
         match self {
-            Self::PUSH0 => "PUSH0".to_string(),
+            Self::PUSH0 => "PUSH0".into(),
             Self::PUSH(n) => format!("PUSH{n}"),
             Self::DUP(n) => format!("DUP{n}"),
             Self::SWAP(n) => format!("SWAP{n}"),
-            Self::UNKNOWN(byte) => format!("UNKNOWN{byte:02x}"),
-            _ => {
-                // For known opcodes, use debug formatting and extract the name
-                format!("{self:?}")
-            }
+            Self::UNKNOWN(b) => format!("UNKNOWN(0x{b:02x})"),
+            other => format!("{other:?}"),
         }
-    }
-
-    /// Get immediate data size for this opcode
-    fn immediate_size(opcode: &Self) -> usize {
-        match opcode {
-            Self::PUSH(n) => *n as usize,
-            Self::PUSH0 => 0,
-            _ => 0,
-        }
-    }
-
-    /// Get metadata for this opcode from the registry for a specific fork
-    pub fn metadata(&self, fork: Fork) -> Option<crate::OpcodeMetadata> {
-        let registry = OpcodeRegistry::new();
-        let opcodes = registry.get_opcodes(fork);
-        opcodes.get(&self.to_byte()).cloned()
-    }
-
-    /// Get metadata using the latest fork (Cancun)
-    pub fn metadata_latest(&self) -> Option<crate::OpcodeMetadata> {
-        self.metadata(Fork::Cancun)
     }
 }
 
-impl fmt::Display for UnifiedOpcode {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{}", self.name())
+// ---------------------------------------------------------------------------
+// Conversions: OpCode ↔ UnifiedOpcode
+// ---------------------------------------------------------------------------
+
+impl From<OpCode> for UnifiedOpcode {
+    fn from(op: OpCode) -> Self {
+        Self::from_byte(op.byte())
+    }
+}
+
+impl From<UnifiedOpcode> for OpCode {
+    fn from(op: UnifiedOpcode) -> Self {
+        OpCode::from_byte(op.to_byte())
     }
 }
 
@@ -533,8 +606,18 @@ impl From<u8> for UnifiedOpcode {
 }
 
 impl From<UnifiedOpcode> for u8 {
-    fn from(opcode: UnifiedOpcode) -> Self {
-        opcode.to_byte()
+    fn from(op: UnifiedOpcode) -> Self {
+        op.to_byte()
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Display / FromStr
+// ---------------------------------------------------------------------------
+
+impl fmt::Display for UnifiedOpcode {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{}", self.name())
     }
 }
 
@@ -542,127 +625,116 @@ impl FromStr for UnifiedOpcode {
     type Err = String;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
-        match s {
-            "STOP" => Ok(Self::STOP),
-            "ADD" => Ok(Self::ADD),
-            "MUL" => Ok(Self::MUL),
-            "SUB" => Ok(Self::SUB),
-            "DIV" => Ok(Self::DIV),
-            "SDIV" => Ok(Self::SDIV),
-            "MOD" => Ok(Self::MOD),
-            "SMOD" => Ok(Self::SMOD),
-            "ADDMOD" => Ok(Self::ADDMOD),
-            "MULMOD" => Ok(Self::MULMOD),
-            "EXP" => Ok(Self::EXP),
-            "SIGNEXTEND" => Ok(Self::SIGNEXTEND),
+        // Try the core OpCode parser first (handles all known names + aliases)
+        if let Ok(op) = s.parse::<OpCode>() {
+            return Ok(Self::from(op));
+        }
 
-            "LT" => Ok(Self::LT),
-            "GT" => Ok(Self::GT),
-            "SLT" => Ok(Self::SLT),
-            "SGT" => Ok(Self::SGT),
-            "EQ" => Ok(Self::EQ),
-            "ISZERO" => Ok(Self::ISZERO),
-            "AND" => Ok(Self::AND),
-            "OR" => Ok(Self::OR),
-            "XOR" => Ok(Self::XOR),
-            "NOT" => Ok(Self::NOT),
-            "BYTE" => Ok(Self::BYTE),
-            "SHL" => Ok(Self::SHL),
-            "SHR" => Ok(Self::SHR),
-            "SAR" => Ok(Self::SAR),
-
-            "SHA3" => Ok(Self::KECCAK256), // Accept both names
-            "KECCAK256" => Ok(Self::KECCAK256),
-
-            "ADDRESS" => Ok(Self::ADDRESS),
-            "BALANCE" => Ok(Self::BALANCE),
-            "ORIGIN" => Ok(Self::ORIGIN),
-            "CALLER" => Ok(Self::CALLER),
-            "CALLVALUE" => Ok(Self::CALLVALUE),
-            "CALLDATALOAD" => Ok(Self::CALLDATALOAD),
-            "CALLDATASIZE" => Ok(Self::CALLDATASIZE),
-            "CALLDATACOPY" => Ok(Self::CALLDATACOPY),
-            "CODESIZE" => Ok(Self::CODESIZE),
-            "CODECOPY" => Ok(Self::CODECOPY),
-            "GASPRICE" => Ok(Self::GASPRICE),
-            "EXTCODESIZE" => Ok(Self::EXTCODESIZE),
-            "EXTCODECOPY" => Ok(Self::EXTCODECOPY),
-            "RETURNDATASIZE" => Ok(Self::RETURNDATASIZE),
-            "RETURNDATACOPY" => Ok(Self::RETURNDATACOPY),
-            "EXTCODEHASH" => Ok(Self::EXTCODEHASH),
-
-            "BLOCKHASH" => Ok(Self::BLOCKHASH),
-            "COINBASE" => Ok(Self::COINBASE),
-            "TIMESTAMP" => Ok(Self::TIMESTAMP),
-            "NUMBER" => Ok(Self::NUMBER),
-            "DIFFICULTY" => Ok(Self::DIFFICULTY),
-            "PREVRANDAO" => Ok(Self::DIFFICULTY), // EIP-4399: Same opcode, different semantic meaning
-            "GASLIMIT" => Ok(Self::GASLIMIT),
-            "CHAINID" => Ok(Self::CHAINID),
-            "SELFBALANCE" => Ok(Self::SELFBALANCE),
-            "BASEFEE" => Ok(Self::BASEFEE),
-            "BLOBHASH" => Ok(Self::BLOBHASH),
-            "BLOBBASEFEE" => Ok(Self::BLOBBASEFEE),
-
-            "POP" => Ok(Self::POP),
-            "MLOAD" => Ok(Self::MLOAD),
-            "MSTORE" => Ok(Self::MSTORE),
-            "MSTORE8" => Ok(Self::MSTORE8),
-            "SLOAD" => Ok(Self::SLOAD),
-            "SSTORE" => Ok(Self::SSTORE),
-            "JUMP" => Ok(Self::JUMP),
-            "JUMPI" => Ok(Self::JUMPI),
-            "PC" => Ok(Self::PC),
-            "MSIZE" => Ok(Self::MSIZE),
-            "GAS" => Ok(Self::GAS),
-            "JUMPDEST" => Ok(Self::JUMPDEST),
-            "TLOAD" => Ok(Self::TLOAD),
-            "TSTORE" => Ok(Self::TSTORE),
-            "MCOPY" => Ok(Self::MCOPY),
-            "PUSH0" => Ok(Self::PUSH0),
-
-            "LOG0" => Ok(Self::LOG0),
-            "LOG1" => Ok(Self::LOG1),
-            "LOG2" => Ok(Self::LOG2),
-            "LOG3" => Ok(Self::LOG3),
-            "LOG4" => Ok(Self::LOG4),
-
-            "CREATE" => Ok(Self::CREATE),
-            "CALL" => Ok(Self::CALL),
-            "CALLCODE" => Ok(Self::CALLCODE),
-            "RETURN" => Ok(Self::RETURN),
-            "DELEGATECALL" => Ok(Self::DELEGATECALL),
-            "CREATE2" => Ok(Self::CREATE2),
-            "STATICCALL" => Ok(Self::STATICCALL),
-            "REVERT" => Ok(Self::REVERT),
-            "INVALID" => Ok(Self::INVALID),
-            "SELFDESTRUCT" => Ok(Self::SELFDESTRUCT),
-
-            // Handle PUSH, DUP, SWAP with numbers
-            s if s.starts_with("PUSH") => {
-                if s == "PUSH0" {
-                    return Ok(Self::PUSH0);
-                }
-                s.strip_prefix("PUSH")
-                    .and_then(|n_str| n_str.parse::<u8>().ok())
-                    .filter(|&n| (1..=32).contains(&n))
-                    .map(Self::PUSH)
-                    .ok_or_else(|| format!("Invalid PUSH opcode: {s}"))
+        // Handle parameterised names: PUSH1–PUSH32, DUP1–DUP16, SWAP1–SWAP16
+        if let Some(rest) = s.strip_prefix("PUSH") {
+            if rest == "0" {
+                return Ok(Self::PUSH0);
             }
-            s if s.starts_with("DUP") => s
-                .strip_prefix("DUP")
-                .and_then(|n_str| n_str.parse::<u8>().ok())
+            return rest
+                .parse::<u8>()
+                .ok()
+                .filter(|&n| (1..=32).contains(&n))
+                .map(Self::PUSH)
+                .ok_or_else(|| format!("invalid PUSH opcode: {s}"));
+        }
+        if let Some(rest) = s.strip_prefix("DUP") {
+            return rest
+                .parse::<u8>()
+                .ok()
                 .filter(|&n| (1..=16).contains(&n))
                 .map(Self::DUP)
-                .ok_or_else(|| format!("Invalid DUP opcode: {s}")),
-            s if s.starts_with("SWAP") => s
-                .strip_prefix("SWAP")
-                .and_then(|n_str| n_str.parse::<u8>().ok())
+                .ok_or_else(|| format!("invalid DUP opcode: {s}"));
+        }
+        if let Some(rest) = s.strip_prefix("SWAP") {
+            return rest
+                .parse::<u8>()
+                .ok()
                 .filter(|&n| (1..=16).contains(&n))
                 .map(Self::SWAP)
-                .ok_or_else(|| format!("Invalid SWAP opcode: {s}")),
-
-            _ => Err(format!("Unknown opcode: {s}")),
+                .ok_or_else(|| format!("invalid SWAP opcode: {s}"));
         }
+
+        Err(format!("unknown opcode: {s}"))
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Tests
+// ---------------------------------------------------------------------------
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn byte_roundtrip() {
+        for b in 0u8..=255 {
+            let op = UnifiedOpcode::from_byte(b);
+            assert_eq!(op.to_byte(), b, "roundtrip failed for 0x{b:02x}");
+        }
+    }
+
+    #[test]
+    fn unknown_detection() {
+        assert!(!UnifiedOpcode::ADD.is_unknown());
+        assert!(UnifiedOpcode::UNKNOWN(0xcc).is_unknown());
+        assert!(UnifiedOpcode::from_byte(0x0c).is_unknown());
+    }
+
+    #[test]
+    fn push_parameterised() {
+        assert_eq!(UnifiedOpcode::from_byte(0x60), UnifiedOpcode::PUSH(1));
+        assert_eq!(UnifiedOpcode::from_byte(0x7f), UnifiedOpcode::PUSH(32));
+        assert_eq!(UnifiedOpcode::PUSH(1).to_byte(), 0x60);
+        assert_eq!(UnifiedOpcode::PUSH(32).to_byte(), 0x7f);
+    }
+
+    #[test]
+    fn parse_immediate_size() {
+        let (op, imm) = UnifiedOpcode::parse(0x60);
+        assert_eq!(op, UnifiedOpcode::PUSH(1));
+        assert_eq!(imm, 1);
+
+        let (op, imm) = UnifiedOpcode::parse(0x7f);
+        assert_eq!(op, UnifiedOpcode::PUSH(32));
+        assert_eq!(imm, 32);
+
+        let (op, imm) = UnifiedOpcode::parse(0x01);
+        assert_eq!(op, UnifiedOpcode::ADD);
+        assert_eq!(imm, 0);
+    }
+
+    #[test]
+    fn from_str_roundtrip() {
+        let cases = [
+            "PUSH1", "PUSH32", "PUSH0", "DUP1", "DUP16", "SWAP1", "SWAP16", "ADD", "STOP",
+        ];
+        for name in cases {
+            let op: UnifiedOpcode = name.parse().unwrap();
+            assert_eq!(op.name(), name, "roundtrip failed for {name}");
+        }
+    }
+
+    #[test]
+    fn opcode_conversion() {
+        let unified = UnifiedOpcode::ADD;
+        let core: OpCode = unified.into();
+        assert_eq!(core, OpCode::ADD);
+
+        let back: UnifiedOpcode = core.into();
+        assert_eq!(back, UnifiedOpcode::ADD);
+    }
+
+    #[test]
+    fn display() {
+        assert_eq!(UnifiedOpcode::STOP.to_string(), "STOP");
+        assert_eq!(UnifiedOpcode::PUSH(1).to_string(), "PUSH1");
+        assert_eq!(UnifiedOpcode::DUP(5).to_string(), "DUP5");
+        assert_eq!(UnifiedOpcode::UNKNOWN(0xcc).to_string(), "UNKNOWN(0xcc)");
     }
 }

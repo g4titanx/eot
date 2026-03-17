@@ -1,90 +1,65 @@
-//! Integration tests for real-world usage scenarios
+//! Integration tests for real-world usage scenarios.
 
-use eot::{forks::*, Fork, OpCode, OpcodeAnalysis, OpcodeRegistry};
+use eot::{Fork, OpCode};
 
 #[test]
-fn test_gas_cost_analysis() {
-    let opcodes = vec![0x01, 0x02]; // Simple ADD, MUL
-    let analysis = OpcodeRegistry::analyze_gas_usage(&opcodes, Fork::London);
-
-    let total_gas = analysis.total_gas;
-
-    // The base transaction cost is 21000, so actual opcode cost should be much less
-    let opcode_gas = total_gas - 21000;
+fn gas_cost_analysis() {
+    let opcodes = [0x01, 0x02]; // ADD, MUL
+    let total: u64 = opcodes
+        .iter()
+        .map(|&b| OpCode::from_byte(b).gas_cost(Fork::London) as u64)
+        .sum();
     assert!(
-        opcode_gas < 1000,
-        "Opcode gas should be less than 1000, got {}",
-        opcode_gas
+        total < 1000,
+        "simple arithmetic should be cheap, got {total}"
     );
-    assert!(
-        total_gas >= 21000,
-        "Total gas should include base transaction cost, got {}",
-        total_gas
-    );
+    assert!(total > 0);
 }
 
 #[test]
-fn test_fork_compatibility_check() {
-    // Test checking if a contract is compatible with different forks
-    let modern_opcodes = vec![0x5c, 0x5d]; // TLOAD, TSTORE
-
-    // Should not be available in older forks
-    for &opcode in &modern_opcodes {
-        assert!(!Frontier::has_opcode(opcode));
-        assert!(!Homestead::has_opcode(opcode));
-        assert!(!Byzantium::has_opcode(opcode));
-        assert!(!Constantinople::has_opcode(opcode));
-        assert!(!Istanbul::has_opcode(opcode));
-        assert!(!Berlin::has_opcode(opcode));
-        assert!(!London::has_opcode(opcode));
-        assert!(!Shanghai::has_opcode(opcode));
-
-        // Should be available in Cancun
-        assert!(Cancun::has_opcode(opcode));
+fn fork_compatibility_check() {
+    // TLOAD/TSTORE only from Cancun
+    for &byte in &[0x5c, 0x5d] {
+        let op = OpCode::new(byte).unwrap();
+        assert!(!op.is_valid_in(Fork::Frontier));
+        assert!(!op.is_valid_in(Fork::Shanghai));
+        assert!(op.is_valid_in(Fork::Cancun));
+        assert!(op.is_valid_in(Fork::Prague));
     }
 }
 
 #[test]
-fn test_contract_analysis_workflow() {
-    // Simulate a complete contract analysis workflow
-    let _contract_bytecode = vec![
-        0x60, 0x80, // PUSH1 0x80
-        0x60, 0x40, // PUSH1 0x40
-        0x52, // MSTORE
-        0x34, // CALLVALUE
-        0x80, // DUP1
-        0x15, // ISZERO
-        0x61, 0x00, 0x16, // PUSH2 0x0016
-        0x57, // JUMPI
-        0x60, 0x00, // PUSH1 0x00
-        0x80, // DUP1
-        0xfd, // REVERT
+fn contract_analysis_workflow() {
+    let opcodes = [
+        0x60u8, 0x60, 0x52, 0x34, 0x80, 0x15, 0x61, 0x57, 0x60, 0x80, 0xfd,
     ];
 
-    // Filter only opcodes (skip immediate data)
-    let opcodes = vec![
-        0x60, 0x60, 0x52, 0x34, 0x80, 0x15, 0x61, 0x57, 0x60, 0x80, 0xfd,
-    ];
+    let mut total_gas = 0u64;
+    let mut uses_revert = false;
+    let mut uses_create = false;
+    let mut uses_transient = false;
 
-    let mut analysis = ContractAnalysis::new();
-
-    for &opcode_byte in &opcodes {
-        if Cancun::has_opcode(opcode_byte) {
-            let opcode = Cancun::from(opcode_byte);
-            analysis.add_opcode(opcode);
+    for &b in &opcodes {
+        if let Some(op) = OpCode::new(b) {
+            total_gas += op.gas_cost(Fork::Cancun) as u64;
+            match b {
+                0xfd => uses_revert = true,
+                0xf0 | 0xf5 => uses_create = true,
+                0x5c | 0x5d => uses_transient = true,
+                _ => {}
+            }
         }
     }
 
-    assert!(analysis.total_gas > 0);
-    assert!(analysis.uses_revert);
-    assert!(!analysis.uses_create);
-    assert!(!analysis.uses_transient_storage);
+    assert!(total_gas > 0);
+    assert!(uses_revert);
+    assert!(!uses_create);
+    assert!(!uses_transient);
 }
 
 #[test]
-fn test_minimal_fork_detection() {
-    // Find the minimal fork required for a set of opcodes
-    let opcodes = vec![
+fn minimal_fork_detection() {
+    let opcodes = [
         0x01, // ADD (Frontier)
         0xf4, // DELEGATECALL (Homestead)
         0xfd, // REVERT (Byzantium)
@@ -96,99 +71,37 @@ fn test_minimal_fork_detection() {
 }
 
 #[test]
-fn test_upgrade_path_analysis() {
-    // Test analyzing what opcodes become available when upgrading forks
-    let london_count = London::all_opcodes().len();
-    let shanghai_count = Shanghai::all_opcodes().len();
-    let cancun_count = Cancun::all_opcodes().len();
+fn upgrade_path_analysis() {
+    let london = OpCode::count_at(Fork::London);
+    let shanghai = OpCode::count_at(Fork::Shanghai);
+    let cancun = OpCode::count_at(Fork::Cancun);
 
-    assert!(shanghai_count > london_count);
-    assert!(cancun_count > shanghai_count);
+    assert!(shanghai > london, "Shanghai should add PUSH0");
+    assert!(
+        cancun > shanghai,
+        "Cancun should add TLOAD/TSTORE/MCOPY/etc."
+    );
 
-    // Check specific additions
-    assert!(!London::has_opcode(0x5f)); // PUSH0
-    assert!(Shanghai::has_opcode(0x5f)); // PUSH0
+    assert!(!OpCode::PUSH0.is_valid_in(Fork::London));
+    assert!(OpCode::PUSH0.is_valid_in(Fork::Shanghai));
 
-    assert!(!Shanghai::has_opcode(0x5c)); // TLOAD
-    assert!(Cancun::has_opcode(0x5c)); // TLOAD
+    assert!(!OpCode::TLOAD.is_valid_in(Fork::Shanghai));
+    assert!(OpCode::TLOAD.is_valid_in(Fork::Cancun));
 }
 
 #[test]
-fn test_registry_comprehensive() {
-    let registry = OpcodeRegistry::new();
-
-    // Test that registry contains opcodes for all forks
-    let frontier_opcodes = registry.get_opcodes(Fork::Frontier);
-    let cancun_opcodes = registry.get_opcodes(Fork::Cancun);
-
-    assert!(!frontier_opcodes.is_empty());
-    assert!(!cancun_opcodes.is_empty());
-    assert!(cancun_opcodes.len() > frontier_opcodes.len());
-
-    // Test specific opcode availability
-    assert!(registry.is_opcode_available(Fork::Frontier, 0x01)); // ADD
-    assert!(!registry.is_opcode_available(Fork::Frontier, 0xf4)); // DELEGATECALL
-    assert!(registry.is_opcode_available(Fork::Homestead, 0xf4)); // DELEGATECALL
-    assert!(registry.is_opcode_available(Fork::Cancun, 0x5c)); // TLOAD
-}
-
-struct ContractAnalysis {
-    total_gas: u64,
-    uses_revert: bool,
-    uses_create: bool,
-    uses_transient_storage: bool,
-    opcode_count: usize,
-}
-
-impl ContractAnalysis {
-    fn new() -> Self {
-        Self {
-            total_gas: 0,
-            uses_revert: false,
-            uses_create: false,
-            uses_transient_storage: false,
-            opcode_count: 0,
-        }
-    }
-
-    fn add_opcode<T: OpCode>(&mut self, opcode: T) {
-        self.total_gas += opcode.gas_cost() as u64;
-        self.opcode_count += 1;
-
-        let byte_val: u8 = opcode.into();
-        match byte_val {
-            0xfd => self.uses_revert = true,                   // REVERT
-            0xf0 | 0xf5 => self.uses_create = true,            // CREATE, CREATE2
-            0x5c | 0x5d => self.uses_transient_storage = true, // TLOAD, TSTORE
-            _ => {}
-        }
-    }
+fn validation_passes() {
+    assert!(eot::validation::validate().is_ok());
 }
 
 fn find_minimal_fork(opcodes: &[u8]) -> Fork {
-    let forks = [
-        Fork::Frontier,
-        Fork::Homestead,
-        Fork::Byzantium,
-        Fork::Constantinople,
-        Fork::Istanbul,
-        Fork::Berlin,
-        Fork::London,
-        Fork::Shanghai,
-        Fork::Cancun,
-    ];
-
-    let registry = OpcodeRegistry::new();
-
-    for &fork in &forks {
-        let available = opcodes
+    for &fork in Fork::ordered() {
+        if opcodes
             .iter()
-            .all(|&opcode| registry.is_opcode_available(fork, opcode));
-
-        if available {
+            .all(|&b| OpCode::from_byte(b).is_valid_in(fork))
+        {
             return fork;
         }
     }
-
-    Fork::Cancun // Fallback to latest
+    Fork::latest()
 }

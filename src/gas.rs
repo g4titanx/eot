@@ -1,13 +1,11 @@
-//! Dynamic gas cost analysis for EVM opcodes
+//! Gas cost analysis for EVM opcodes.
 //!
-//! This module provides context-aware gas cost calculation that accounts for:
-//! - EIP-2929 warm/cold storage and account access
-//! - Memory expansion costs (quadratic pricing)
-//! - Complex call operation pricing
-//! - Fork-specific gas cost evolution
-//! - Storage state changes (EIP-2200)
-
-use std::collections::HashMap;
+//! This module provides:
+//! - **Static classification** via [`GasCostCategory`]
+//! - **Dynamic calculation** via [`DynamicGasCalculator`] (EIP-2929 warm/cold,
+//!   memory expansion, complex call pricing)
+//! - **Sequence analysis** via [`GasAnalyzer`]
+//! - **Fork comparison** via [`GasComparator`]
 
 pub mod analysis;
 pub mod calculator;
@@ -17,201 +15,84 @@ pub use analysis::*;
 pub use calculator::*;
 pub use context::*;
 
-/// Represents different types of gas costs
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub enum GasCostType {
-    /// Fixed cost regardless of context
-    Static(u64),
-    /// Dynamic cost that depends on execution context
-    Dynamic {
-        /// Base gas cost before variable factors
-        base_cost: u64,
-        /// Additional factors that can affect the final cost
-        variable_factors: Vec<GasVariableFactor>,
-    },
-    /// Memory expansion cost
-    MemoryExpansion {
-        /// Base cost for the operation
-        base_cost: u64,
-        /// Factor multiplied by memory size
-        memory_size_factor: u64,
-    },
-    /// Complex cost with multiple dependencies
-    Complex,
-}
+// ---------------------------------------------------------------------------
+// Gas constants
+// ---------------------------------------------------------------------------
 
-/// Factors that can affect variable gas costs
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub enum GasVariableFactor {
-    /// Cost depends on whether storage slot was previously accessed
-    StorageWarmCold {
-        /// Gas cost for warm (previously accessed) storage
-        warm_cost: u64,
-        /// Gas cost for cold (first access) storage
-        cold_cost: u64,
-    },
-    /// Cost depends on whether address was previously accessed
-    AddressWarmCold {
-        /// Gas cost for warm (previously accessed) address
-        warm_cost: u64,
-        /// Gas cost for cold (first access) address
-        cold_cost: u64,
-    },
-    /// Cost depends on memory expansion
-    MemoryExpansion,
-    /// Cost depends on value being transferred
-    ValueTransfer(u64),
-    /// Cost depends on account creation
-    AccountCreation(u64),
-    /// Cost for copying data
-    DataCopy {
-        /// Gas cost per 32-byte word copied
-        cost_per_word: u64,
-    },
-}
+/// Gas cost: base (Gzero) — STOP, RETURN, REVERT
+pub const ZERO: u64 = 0;
+/// Gas cost: jumpdest
+pub const JUMPDEST: u64 = 1;
+/// Gas cost: very low (Gbase) — ADD, SUB, LT, GT, etc.
+pub const VERYLOW: u64 = 3;
+/// Gas cost: low (Glow) — MUL, DIV, etc.
+pub const LOW: u64 = 5;
+/// Gas cost: mid (Gmid) — ADDMOD, MULMOD
+pub const MID: u64 = 8;
+/// Gas cost: high (Ghigh) — JUMP
+pub const HIGH: u64 = 8;
+/// Gas cost: warm storage read (EIP-2929)
+pub const WARM_STORAGE_READ_COST: u64 = 100;
+/// Gas cost: cold SLOAD (EIP-2929)
+pub const COLD_SLOAD_COST: u64 = 2100;
+/// Gas cost: cold account access (EIP-2929)
+pub const COLD_ACCOUNT_ACCESS_COST: u64 = 2600;
+/// Gas cost: SSTORE set (new value)
+pub const SSTORE_SET: u64 = 20000;
+/// Gas cost: SSTORE reset (change value)
+pub const SSTORE_RESET: u64 = 2900;
+/// Gas cost: base transaction
+pub const TX_BASE: u64 = 21000;
+/// Gas cost: per byte of transaction data (non-zero)
+pub const TX_DATA_NON_ZERO: u64 = 16;
+/// Gas cost: per byte of transaction data (zero)
+pub const TX_DATA_ZERO: u64 = 4;
+/// Gas cost: contract creation
+pub const CREATE_GAS: u64 = 32000;
+/// Gas cost: per word of SHA3 data
+pub const KECCAK256_WORD: u64 = 6;
+/// Gas cost: per word of copied data
+pub const COPY_WORD: u64 = 3;
+/// Gas cost: per LOG topic
+pub const LOG_TOPIC: u64 = 375;
+/// Gas cost: per byte of LOG data
+pub const LOG_DATA: u64 = 8;
 
-/// Gas cost categories for optimization analysis
+// ---------------------------------------------------------------------------
+// GasCostCategory
+// ---------------------------------------------------------------------------
+
+/// Broad classification of opcode gas costs for analysis.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum GasCostCategory {
-    /// Very cheap operations (1-3 gas)
+    /// Very cheap operations (1–3 gas).
     VeryLow,
-    /// Low cost operations (3-8 gas)  
+    /// Low cost operations (3–8 gas).
     Low,
-    /// Medium cost operations (8-100 gas)
+    /// Medium cost operations (8–100 gas).
     Medium,
-    /// High cost operations (100-2600 gas)
+    /// High cost operations (100–2600 gas).
     High,
-    /// Very high cost operations (2600+ gas)
+    /// Very high cost operations (2600+ gas).
     VeryHigh,
-    /// Unknown/unclassified operations
+    /// Unclassified.
     Unknown,
 }
 
-/// Result of gas analysis for a sequence of opcodes
-#[derive(Debug, Clone)]
-pub struct GasAnalysisResult {
-    /// Total gas consumed including base transaction cost
-    pub total_gas: u64,
-    /// Gas breakdown by opcode
-    pub breakdown: Vec<(u8, u64)>,
-    /// Warnings about expensive operations
-    pub warnings: Vec<String>,
-    /// Final execution context after simulation
-    pub context: ExecutionContext,
-    /// Detected optimization opportunities
-    pub optimizations: Vec<String>,
-}
-
-impl GasAnalysisResult {
-    /// Get gas efficiency ratio compared to a baseline
-    pub fn efficiency_ratio(&self, baseline_gas: u64) -> f64 {
-        self.total_gas as f64 / baseline_gas as f64
-    }
-
-    /// Check if gas usage is within acceptable bounds
-    pub fn is_within_bounds(&self, max_gas: u64) -> bool {
-        self.total_gas <= max_gas
-    }
-
-    /// Get the most expensive operations
-    pub fn top_expensive_operations(&self, n: usize) -> Vec<(u8, u64)> {
-        let mut sorted = self.breakdown.clone();
-        sorted.sort_by(|a, b| b.1.cmp(&a.1));
-        sorted.into_iter().take(n).collect()
-    }
-
-    /// Calculate gas efficiency score (0-100, higher is better)
-    pub fn efficiency_score(&self) -> u8 {
-        if self.breakdown.is_empty() {
-            return 0;
-        }
-
-        // Calculate average gas per opcode, excluding base transaction cost
-        let opcode_gas = if self.total_gas >= 21000 {
-            self.total_gas - 21000 // Subtract base transaction cost
-        } else {
-            self.total_gas
-        };
-
-        let avg_gas_per_opcode = opcode_gas / self.breakdown.len() as u64;
-
-        // Score based on average gas per opcode (lower is better)
-        match avg_gas_per_opcode {
-            0..=10 => 100,
-            11..=50 => 80,
-            51..=200 => 60,
-            201..=1000 => 40,
-            1001..=5000 => 20,
-            _ => 0,
-        }
-    }
-
-    /// Get recommendations for gas optimization
-    pub fn get_optimization_recommendations(&self) -> Vec<String> {
-        let mut recommendations = self.optimizations.clone();
-
-        // Analyze patterns in the breakdown
-        let expensive_opcodes: Vec<_> = self
-            .breakdown
-            .iter()
-            .filter(|(_, cost)| *cost > 1000)
-            .collect();
-
-        if expensive_opcodes.len() > self.breakdown.len() / 4 {
-            recommendations.push(
-                "High proportion of expensive operations - consider algorithmic optimizations"
-                    .to_string(),
-            );
-        }
-
-        // Check for repeated expensive operations
-        let mut opcode_counts = HashMap::new();
-        for (opcode, _) in &self.breakdown {
-            *opcode_counts.entry(*opcode).or_insert(0) += 1;
-        }
-
-        for (opcode, count) in opcode_counts {
-            if count > 5 && matches!(opcode, 0x54 | 0x55 | 0xf1 | 0xf4) {
-                recommendations.push(format!(
-                    "Opcode 0x{opcode:02x} used {count} times - consider batching or caching"
-                ));
-            }
-        }
-
-        recommendations
-    }
-
-    /// Check if this represents an optimized gas usage pattern
-    pub fn is_optimized(&self) -> bool {
-        self.efficiency_score() > 70 && self.warnings.is_empty()
-    }
-}
-
-/// Utility functions for gas cost classification
 impl GasCostCategory {
-    /// Classify an opcode by its gas cost category
-    pub fn classify_opcode(opcode: u8) -> Self {
+    /// Classify an opcode by its base gas cost range.
+    pub fn classify(opcode: u8) -> Self {
         match opcode {
-            // Very cheap operations (1-3 gas)
             0x01..=0x0b | 0x10..=0x1d | 0x50 | 0x58 | 0x80..=0x9f => Self::VeryLow,
-
-            // Low cost operations (3-8 gas)
             0x51..=0x53 | 0x56..=0x57 | 0x5a..=0x5b => Self::Low,
-
-            // Medium cost operations (8-100 gas)
             0x20 | 0x30 | 0x32..=0x3a | 0x40..=0x48 => Self::Medium,
-
-            // High cost operations (100-2600 gas) - specific opcodes
             0x54 | 0x31 | 0x3b | 0x3c | 0x3d | 0x3e | 0x3f => Self::High,
-
-            // Very high cost operations (2600+ gas)
             0x55 | 0xf0..=0xff => Self::VeryHigh,
-
             _ => Self::Unknown,
         }
     }
 
-    /// Get the typical gas range for this category
+    /// Returns the typical gas range for this category.
     pub fn gas_range(&self) -> (u64, u64) {
         match self {
             Self::VeryLow => (1, 3),
@@ -224,57 +105,148 @@ impl GasCostCategory {
     }
 }
 
+// ---------------------------------------------------------------------------
+// GasAnalysis — lightweight analysis result
+// ---------------------------------------------------------------------------
+
+/// Gas analysis result for a sequence of opcodes.
+#[derive(Debug, Clone)]
+pub struct GasAnalysis {
+    /// Total gas (including base transaction cost).
+    pub total_gas: u64,
+    /// Per-opcode gas breakdown: `(opcode_byte, gas_cost)`.
+    pub breakdown: Vec<(u8, u16)>,
+    /// Optimization suggestions.
+    pub optimizations: Vec<String>,
+    /// Warnings about expensive operations.
+    pub warnings: Vec<String>,
+}
+
+impl GasAnalysis {
+    /// Creates a new analysis with base transaction cost.
+    pub fn new() -> Self {
+        Self {
+            total_gas: TX_BASE,
+            breakdown: Vec::new(),
+            optimizations: Vec::new(),
+            warnings: Vec::new(),
+        }
+    }
+
+    /// Gas efficiency score (0–100, higher is better).
+    pub fn efficiency_score(&self) -> u8 {
+        if self.breakdown.is_empty() {
+            return 0;
+        }
+        let opcode_gas = self.total_gas.saturating_sub(TX_BASE);
+        let avg = opcode_gas / self.breakdown.len() as u64;
+        match avg {
+            0..=10 => 100,
+            11..=50 => 80,
+            51..=200 => 60,
+            201..=1000 => 40,
+            1001..=5000 => 20,
+            _ => 0,
+        }
+    }
+
+    /// Returns optimization recommendations based on the breakdown.
+    pub fn get_optimization_recommendations(&self) -> Vec<String> {
+        let mut recs = self.optimizations.clone();
+        let mut counts = std::collections::HashMap::new();
+        for &(op, _) in &self.breakdown {
+            *counts.entry(op).or_insert(0u32) += 1;
+        }
+        for (op, count) in counts {
+            if count > 5 && matches!(op, 0x54 | 0x55 | 0xf1 | 0xf4) {
+                recs.push(format!(
+                    "Opcode 0x{op:02x} used {count} times — consider batching or caching"
+                ));
+            }
+        }
+        recs
+    }
+
+    /// Returns `true` if the analysis looks well-optimised.
+    pub fn is_optimized(&self) -> bool {
+        self.efficiency_score() > 70 && self.warnings.is_empty()
+    }
+
+    /// Gas usage grouped by [`GasCostCategory`].
+    pub fn gas_by_category(&self) -> std::collections::HashMap<GasCostCategory, u64> {
+        let mut map = std::collections::HashMap::new();
+        for &(op, cost) in &self.breakdown {
+            *map.entry(GasCostCategory::classify(op)).or_insert(0) += cost as u64;
+        }
+        map
+    }
+
+    /// Detects operations that could cause out-of-gas.
+    pub fn find_gas_bombs(&self) -> Vec<String> {
+        let mut bombs = Vec::new();
+        for &(op, cost) in &self.breakdown {
+            match op {
+                0x55 if cost > 5000 => {
+                    bombs.push("SSTORE with high gas cost — could cause out-of-gas".into());
+                }
+                0xf1 | 0xf2 | 0xf4 | 0xfa if cost > 10000 => {
+                    bombs.push("Call operation with high gas cost — ensure sufficient gas".into());
+                }
+                0xf0 | 0xf5 if cost > 50000 => {
+                    bombs.push("Create operation with very high gas cost".into());
+                }
+                _ => {}
+            }
+        }
+        bombs
+    }
+
+    /// Estimates potential gas savings from optimizations.
+    pub fn estimate_optimization_savings(&self) -> u64 {
+        let mut savings = 0u64;
+        let mut sload_count = 0u32;
+        let mut prev = None;
+        for &(op, cost) in &self.breakdown {
+            if op == 0x54 {
+                sload_count += 1;
+            }
+            if matches!(prev, Some(0x80..=0x8f)) && op == 0x50 {
+                savings += cost as u64;
+            }
+            prev = Some(op);
+        }
+        if sload_count > 2 {
+            savings += ((sload_count - 1) / 2) as u64 * COLD_SLOAD_COST;
+        }
+        savings
+    }
+}
+
+impl Default for GasAnalysis {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
 
     #[test]
-    fn test_gas_cost_category_classification() {
-        assert_eq!(
-            GasCostCategory::classify_opcode(0x01),
-            GasCostCategory::VeryLow
-        ); // ADD
-        assert_eq!(
-            GasCostCategory::classify_opcode(0x54),
-            GasCostCategory::High
-        ); // SLOAD
-        assert_eq!(
-            GasCostCategory::classify_opcode(0x55),
-            GasCostCategory::VeryHigh
-        ); // SSTORE
+    fn category_classification() {
+        assert_eq!(GasCostCategory::classify(0x01), GasCostCategory::VeryLow);
+        assert_eq!(GasCostCategory::classify(0x54), GasCostCategory::High);
+        assert_eq!(GasCostCategory::classify(0x55), GasCostCategory::VeryHigh);
     }
 
     #[test]
-    fn test_gas_analysis_result_efficiency_score() {
-        let result = GasAnalysisResult {
-            total_gas: 21009,                                 // Base + 9 gas for 3 opcodes
-            breakdown: vec![(0x01, 3), (0x02, 3), (0x03, 3)], // Very efficient operations
+    fn efficiency_score() {
+        let a = GasAnalysis {
+            total_gas: TX_BASE + 9,
+            breakdown: vec![(0x01, 3), (0x02, 3), (0x03, 3)],
             warnings: vec![],
-            context: ExecutionContext::default(),
             optimizations: vec![],
         };
-
-        assert!(result.efficiency_score() >= 80); // Should be very efficient
-    }
-
-    #[test]
-    fn test_top_expensive_operations() {
-        let result = GasAnalysisResult {
-            total_gas: 50000,
-            breakdown: vec![
-                (0x54, 2100), // SLOAD
-                (0x01, 3),    // ADD
-                (0x55, 5000), // SSTORE
-                (0x02, 3),    // MUL
-            ],
-            warnings: vec![],
-            context: ExecutionContext::default(),
-            optimizations: vec![],
-        };
-
-        let top_ops = result.top_expensive_operations(2);
-        assert_eq!(top_ops.len(), 2);
-        assert_eq!(top_ops[0], (0x55, 5000)); // SSTORE should be most expensive
-        assert_eq!(top_ops[1], (0x54, 2100)); // SLOAD should be second
+        assert!(a.efficiency_score() >= 80);
     }
 }
