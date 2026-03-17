@@ -711,7 +711,9 @@ mod tests {
 
     #[test]
     fn from_str_roundtrip() {
-        let cases = ["PUSH1", "PUSH32", "PUSH0", "DUP1", "DUP16", "SWAP1", "SWAP16", "ADD", "STOP"];
+        let cases = [
+            "PUSH1", "PUSH32", "PUSH0", "DUP1", "DUP16", "SWAP1", "SWAP16", "ADD", "STOP",
+        ];
         for name in cases {
             let op: UnifiedOpcode = name.parse().unwrap();
             assert_eq!(op.name(), name, "roundtrip failed for {name}");
