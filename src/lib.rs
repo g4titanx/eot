@@ -35,6 +35,11 @@ use std::str::FromStr;
 pub mod gas;
 pub mod validation;
 
+#[cfg(feature = "unified-opcodes")]
+pub mod unified;
+#[cfg(feature = "unified-opcodes")]
+pub use unified::UnifiedOpcode;
+
 // Re-export key gas types
 pub use gas::{DynamicGasCalculator, ExecutionContext, GasAnalysis, GasCostCategory};
 
